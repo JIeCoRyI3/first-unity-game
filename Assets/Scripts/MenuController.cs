@@ -1,5 +1,8 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem.UI;
+#endif
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -17,7 +20,12 @@ public class MenuController : MonoBehaviour
         {
             var es = new GameObject("EventSystem");
             es.AddComponent<EventSystem>();
+            // Use the correct UI input module depending on active input backend
+#if ENABLE_INPUT_SYSTEM
+            es.AddComponent<InputSystemUIInputModule>();
+#else
             es.AddComponent<StandaloneInputModule>();
+#endif
         }
     }
 
