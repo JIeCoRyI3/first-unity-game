@@ -1,5 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem.UI;
+#endif
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -17,6 +23,10 @@ public class SnakeGame : MonoBehaviour
     [SerializeField, Tooltip("Snake body color")] private Color bodyColor = new Color(0.2f, 0.7f, 0.25f);
     [SerializeField, Tooltip("Food color")] private Color foodColor = new Color(0.9f, 0.2f, 0.2f);
 
+    [Header("Visuals")]
+    [SerializeField, Tooltip("Border color")] private Color borderColor = new Color(0.85f, 0.85f, 0.95f);
+    [SerializeField, Tooltip("Border thickness in world units")] private float borderThickness = 0.12f;
+
     private LinkedList<Vector2Int> snakeCells; // head is First
     private HashSet<Vector2Int> snakeCellSet;  // for O(1) collision checks
 
@@ -29,9 +39,18 @@ public class SnakeGame : MonoBehaviour
 
     // Rendering
     private Transform renderContainer;
+    private Transform borderContainer;
+    private GameObject borderTop;
+    private GameObject borderBottom;
+    private GameObject borderLeft;
+    private GameObject borderRight;
     private readonly List<GameObject> segmentObjects = new List<GameObject>();
     private GameObject foodObject;
     private Sprite cellSprite;
+    private Sprite snakeSprite;
+    private Sprite[] foodSprites;
+    private bool foodNeedsSprite;
+    private GameObject gameOverCanvasGO;
 
     private void Start()
     {
@@ -96,6 +115,17 @@ public class SnakeGame : MonoBehaviour
             cellSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f, 0, SpriteMeshType.FullRect);
             cellSprite.name = "CellSprite";
         }
+
+        if (snakeSprite == null)
+        {
+            snakeSprite = GenerateSnakeSprite();
+        }
+        if (foodSprites == null || foodSprites.Length != 5)
+        {
+            foodSprites = GenerateFoodSprites();
+        }
+
+        BuildBorders();
     }
 
     private void StartNewGame()
@@ -105,6 +135,7 @@ public class SnakeGame : MonoBehaviour
         snakeCellSet = new HashSet<Vector2Int>();
         moveTimer = 0f;
         isAlive = true;
+        foodNeedsSprite = false;
 
         // Initial snake of length 2, centered
         Vector2Int head = new Vector2Int(gridWidth / 2, gridHeight / 2);
@@ -120,6 +151,9 @@ public class SnakeGame : MonoBehaviour
 
         SpawnFood();
         RenderWorld(fullRebuild: true);
+
+        // Hide any previous game over UI
+        HideGameOverUI();
     }
 
     private void HandleInput()
@@ -150,8 +184,7 @@ public class SnakeGame : MonoBehaviour
                 return;
             }
         }
-#endif
-
+#else
         if (Input.GetKeyDown(KeyCode.UpArrow))
         {
             TrySetNextDirection(Vector2Int.up);
@@ -168,18 +201,17 @@ public class SnakeGame : MonoBehaviour
         {
             TrySetNextDirection(Vector2Int.right);
         }
+#endif
     }
 
     private bool GetRestartPressed()
     {
 #if ENABLE_INPUT_SYSTEM
         var kb = Keyboard.current;
-        if (kb != null && kb.rKey.wasPressedThisFrame)
-        {
-            return true;
-        }
-#endif
+        return kb != null && kb.rKey.wasPressedThisFrame;
+#else
         return Input.GetKeyDown(KeyCode.R);
+#endif
     }
 
     private void TrySetNextDirection(Vector2Int desired)
@@ -258,6 +290,7 @@ public class SnakeGame : MonoBehaviour
             if (!snakeCellSet.Contains(p))
             {
                 foodCell = p;
+                foodNeedsSprite = true;
                 RenderFood();
                 return;
             }
@@ -272,6 +305,7 @@ public class SnakeGame : MonoBehaviour
                 if (!snakeCellSet.Contains(p))
                 {
                     foodCell = p;
+                    foodNeedsSprite = true;
                     RenderFood();
                     return;
                 }
@@ -287,6 +321,7 @@ public class SnakeGame : MonoBehaviour
 #if UNITY_EDITOR
         Debug.Log("Game Over. Press R to restart.");
 #endif
+        ShowGameOverUI();
     }
 
     private void RenderWorld(bool fullRebuild)
@@ -313,7 +348,8 @@ public class SnakeGame : MonoBehaviour
             go.SetActive(true);
             go.transform.position = new Vector3(cell.x, cell.y, 0f);
             var sr = go.GetComponent<SpriteRenderer>();
-            sr.color = (index == 0) ? headColor : bodyColor;
+            sr.sprite = snakeSprite;
+            sr.color = Color.white;
             index++;
         }
         // Disable any extras
@@ -330,7 +366,7 @@ public class SnakeGame : MonoBehaviour
         if (renderContainer == null) EnsureRuntimeAssets();
         for (int i = 0; i < countToAdd; i++)
         {
-            var go = CreateCellGO("SnakeSegment", bodyColor);
+            var go = CreateCellGO("SnakeSegment", Color.white, snakeSprite);
             segmentObjects.Add(go);
         }
     }
@@ -339,24 +375,248 @@ public class SnakeGame : MonoBehaviour
     {
         if (foodObject == null)
         {
-            foodObject = CreateCellGO("Food", foodColor);
+            var firstSprite = (foodSprites != null && foodSprites.Length > 0) ? foodSprites[0] : cellSprite;
+            foodObject = CreateCellGO("Food", Color.white, firstSprite);
         }
         foodObject.SetActive(true);
         foodObject.transform.position = new Vector3(foodCell.x, foodCell.y, 0f);
         var sr = foodObject.GetComponent<SpriteRenderer>();
-        sr.color = foodColor;
+        if (foodNeedsSprite && foodSprites != null && foodSprites.Length > 0)
+        {
+            int idx = Random.Range(0, foodSprites.Length);
+            sr.sprite = foodSprites[idx];
+            sr.color = Color.white;
+            foodNeedsSprite = false;
+        }
     }
 
-    private GameObject CreateCellGO(string baseName, Color tint)
+    private GameObject CreateCellGO(string baseName, Color tint, Sprite sprite)
     {
         var go = new GameObject(baseName);
         go.transform.SetParent(renderContainer, worldPositionStays: false);
         var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = cellSprite;
+        sr.sprite = sprite != null ? sprite : cellSprite;
         sr.color = tint;
         sr.sortingOrder = 0;
         // Scale to 1x1 world units (already is, but be explicit)
         go.transform.localScale = Vector3.one;
         return go;
+    }
+
+    private void BuildBorders()
+    {
+        if (borderContainer == null)
+        {
+            var go = new GameObject("Borders");
+            borderContainer = go.transform;
+            borderContainer.SetParent(renderContainer, worldPositionStays: false);
+        }
+
+        // Helper to create or reuse a border segment
+        GameObject EnsureBorder(ref GameObject obj, string name)
+        {
+            if (obj == null)
+            {
+                obj = new GameObject(name);
+                obj.transform.SetParent(borderContainer, worldPositionStays: false);
+                var sr = obj.AddComponent<SpriteRenderer>();
+                sr.sprite = cellSprite;
+                sr.color = borderColor;
+                sr.sortingOrder = -1; // behind snake and food
+            }
+            return obj;
+        }
+
+        // Top
+        EnsureBorder(ref borderTop, "Top");
+        borderTop.transform.position = new Vector3((gridWidth - 1) * 0.5f, gridHeight - 0.5f, 0f);
+        borderTop.transform.localScale = new Vector3(gridWidth, Mathf.Max(0.01f, borderThickness), 1f);
+
+        // Bottom
+        EnsureBorder(ref borderBottom, "Bottom");
+        borderBottom.transform.position = new Vector3((gridWidth - 1) * 0.5f, -0.5f, 0f);
+        borderBottom.transform.localScale = new Vector3(gridWidth, Mathf.Max(0.01f, borderThickness), 1f);
+
+        // Left
+        EnsureBorder(ref borderLeft, "Left");
+        borderLeft.transform.position = new Vector3(-0.5f, (gridHeight - 1) * 0.5f, 0f);
+        borderLeft.transform.localScale = new Vector3(Mathf.Max(0.01f, borderThickness), gridHeight, 1f);
+
+        // Right
+        EnsureBorder(ref borderRight, "Right");
+        borderRight.transform.position = new Vector3(gridWidth - 0.5f, (gridHeight - 1) * 0.5f, 0f);
+        borderRight.transform.localScale = new Vector3(Mathf.Max(0.01f, borderThickness), gridHeight, 1f);
+    }
+
+    private Sprite GenerateSnakeSprite()
+    {
+        const int size = 8;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.name = "SnakeTexture";
+        tex.filterMode = FilterMode.Point;
+
+        // Checker pattern with subtle shading
+        var cLight = new Color(0.2f, 0.8f, 0.35f, 1f);
+        var cDark  = new Color(0.12f, 0.55f, 0.22f, 1f);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                bool even = ((x + y) & 1) == 0;
+                tex.SetPixel(x, y, even ? cLight : cDark);
+            }
+        }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
+    }
+
+    private Sprite[] GenerateFoodSprites()
+    {
+        var sprites = new Sprite[5];
+        sprites[0] = GenerateSolidCircleSprite(8, new Color(0.9f, 0.25f, 0.2f, 1f), new Color(0.65f, 0.05f, 0.05f, 1f)); // red
+        sprites[1] = GenerateSolidCircleSprite(8, new Color(1.0f, 0.7f, 0.2f, 1f), new Color(0.8f, 0.45f, 0.05f, 1f)); // orange
+        sprites[2] = GenerateSolidCircleSprite(8, new Color(0.9f, 0.9f, 0.25f, 1f), new Color(0.7f, 0.65f, 0.05f, 1f)); // yellow
+        sprites[3] = GenerateSolidCircleSprite(8, new Color(0.55f, 0.45f, 0.9f, 1f), new Color(0.35f, 0.25f, 0.7f, 1f)); // purple
+        sprites[4] = GenerateSolidCircleSprite(8, new Color(0.25f, 0.75f, 1.0f, 1f), new Color(0.05f, 0.45f, 0.8f, 1f)); // blue
+        return sprites;
+    }
+
+    private Sprite GenerateSolidCircleSprite(int size, Color fill, Color border)
+    {
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.name = "FoodTexture";
+        tex.filterMode = FilterMode.Point;
+        Vector2 center = new Vector2((size - 1) * 0.5f, (size - 1) * 0.5f);
+        float radius = size * 0.35f;
+        float borderWidth = Mathf.Max(1f, size * 0.12f);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x, y), center);
+                if (d <= radius)
+                {
+                    bool isBorder = d >= radius - borderWidth;
+                    tex.SetPixel(x, y, isBorder ? border : fill);
+                }
+                else
+                {
+                    tex.SetPixel(x, y, new Color(0, 0, 0, 0));
+                }
+            }
+        }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
+    }
+
+    private void ShowGameOverUI()
+    {
+        if (gameOverCanvasGO != null) return;
+        EnsureEventSystemExists();
+
+        gameOverCanvasGO = new GameObject("GameOverCanvas");
+        var canvas = gameOverCanvasGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        gameOverCanvasGO.AddComponent<CanvasScaler>();
+        gameOverCanvasGO.AddComponent<GraphicRaycaster>();
+
+        var panel = new GameObject("Panel");
+        panel.transform.SetParent(gameOverCanvasGO.transform, false);
+        var panelImg = panel.AddComponent<Image>();
+        panelImg.color = new Color(0f, 0f, 0f, 0.6f);
+        var panelRT = panel.GetComponent<RectTransform>();
+        panelRT.anchorMin = new Vector2(0, 0);
+        panelRT.anchorMax = new Vector2(1, 1);
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        var dialog = new GameObject("Dialog");
+        dialog.transform.SetParent(panel.transform, false);
+        var dialogImg = dialog.AddComponent<Image>();
+        dialogImg.color = new Color(0.12f, 0.14f, 0.18f, 1f);
+        var dialogRT = dialog.GetComponent<RectTransform>();
+        dialogRT.sizeDelta = new Vector2(420, 240);
+        dialogRT.anchorMin = new Vector2(0.5f, 0.5f);
+        dialogRT.anchorMax = new Vector2(0.5f, 0.5f);
+        dialogRT.anchoredPosition = Vector2.zero;
+
+        var v = dialog.AddComponent<VerticalLayoutGroup>();
+        v.childAlignment = TextAnchor.MiddleCenter;
+        v.spacing = 14f;
+        v.padding = new RectOffset(20, 20, 20, 20);
+
+        var titleGO = new GameObject("Title");
+        titleGO.transform.SetParent(dialog.transform, false);
+        var title = titleGO.AddComponent<Text>();
+        title.text = "Игра окончена";
+        title.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        title.fontSize = 36;
+        title.alignment = TextAnchor.MiddleCenter;
+        title.color = new Color(0.95f, 0.97f, 1f, 1f);
+        var titleLE = titleGO.AddComponent<LayoutElement>();
+        titleLE.minHeight = 64f;
+
+        Button restartBtn = CreateUIButton(dialog.transform, "Заново");
+        restartBtn.onClick.AddListener(() => { HideGameOverUI(); StartNewGame(); });
+
+        Button menuBtn = CreateUIButton(dialog.transform, "В меню");
+        menuBtn.onClick.AddListener(() => { HideGameOverUI(); SceneManager.LoadScene("Menu"); });
+    }
+
+    private Button CreateUIButton(Transform parent, string label)
+    {
+        var go = new GameObject(label + "Button");
+        go.transform.SetParent(parent, false);
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0.18f, 0.22f, 0.28f, 1f);
+        var btn = go.AddComponent<Button>();
+        var colors = btn.colors;
+        colors.normalColor = img.color;
+        colors.highlightedColor = new Color(0.22f, 0.26f, 0.34f, 1f);
+        colors.pressedColor = new Color(0.14f, 0.18f, 0.22f, 1f);
+        colors.selectedColor = colors.highlightedColor;
+        btn.colors = colors;
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(300, 60);
+
+        var textGO = new GameObject("Text");
+        textGO.transform.SetParent(go.transform, false);
+        var t = textGO.AddComponent<Text>();
+        t.text = label;
+        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.fontSize = 28;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.color = new Color(0.9f, 0.95f, 1f, 1f);
+        var textRT = t.GetComponent<RectTransform>();
+        textRT.anchorMin = Vector2.zero;
+        textRT.anchorMax = Vector2.one;
+        textRT.offsetMin = Vector2.zero;
+        textRT.offsetMax = Vector2.zero;
+        return btn;
+    }
+
+    private void HideGameOverUI()
+    {
+        if (gameOverCanvasGO != null)
+        {
+            Destroy(gameOverCanvasGO);
+            gameOverCanvasGO = null;
+        }
+    }
+
+    private void EnsureEventSystemExists()
+    {
+        if (FindObjectOfType<EventSystem>() == null)
+        {
+            var es = new GameObject("EventSystem");
+            es.AddComponent<EventSystem>();
+            // Use the correct UI input module depending on active input backend
+#if ENABLE_INPUT_SYSTEM
+            es.AddComponent<InputSystemUIInputModule>();
+#else
+            es.AddComponent<StandaloneInputModule>();
+#endif
+        }
     }
 }

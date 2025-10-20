@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public static class SnakeBootstrap
+public static class MenuBootstrap
 {
     private static bool s_Registered;
 
@@ -15,10 +15,9 @@ public static class SnakeBootstrap
 
     private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (scene.name != "Snake") return;
-        var existing = Object.FindObjectOfType<SnakeGame>();
-        if (existing != null) return;
-        var controller = new GameObject("SnakeGame");
-        controller.AddComponent<SnakeGame>();
+        if (scene.name != "Menu") return;
+        if (Object.FindObjectOfType<MenuController>() != null) return;
+        var go = new GameObject("Menu");
+        go.AddComponent<MenuController>();
     }
 }
