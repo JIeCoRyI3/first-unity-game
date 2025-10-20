@@ -548,7 +548,7 @@ public class SnakeGame : MonoBehaviour
         titleGO.transform.SetParent(dialog.transform, false);
         var title = titleGO.AddComponent<Text>();
         title.text = "Игра окончена";
-        title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        title.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         title.fontSize = 36;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.95f, 0.97f, 1f, 1f);
@@ -583,7 +583,7 @@ public class SnakeGame : MonoBehaviour
         textGO.transform.SetParent(go.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = label;
-        t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         t.fontSize = 28;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 1f, 1f);
