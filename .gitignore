@@ -1,0 +1,95 @@
+# ============ Unity ============
+
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+UserSettings/
+SysCache/
+*.pidb
+*.booproj
+*.svd
+*.user
+*.userprefs
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.bak
+*.old
+*.orig
+*.mdb
+*.pdb
+*.opendb
+*.VC.db
+*.VC.opendb
+*.pidb.meta
+
+# ============ Generated folders ============
+/Assets/AssetStoreTools*
+/Assets/Plugins/Editor/JetBrains*
+
+# ============ Build artifacts ============
+*.apk
+*.aab
+*.unitypackage
+*.app
+*.exe
+*.xcodeproj
+*.xcworkspace
+*.xcuserstate
+*.xcuserdatad
+*.ipa
+
+# ============ Crash and Debug logs ============
+sysinfo.txt
+*.stacktrace
+*.log
+
+# ============ OS / IDE junk ============
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# JetBrains Rider / VSCode
+.idea/
+.vscode/
+.vs/
+*.DotSettings.user
+
+# ============ Visual Studio cache ============
+/.vs/
+*.VisualState.xml
+*.userosscache
+*.suo
+*.userprefs
+*.csproj.user
+*.sln.docstates
+
+# ============ Other Tools ============
+/Packages/com.unity.collab-proxy/
+# Uncomment if using PlasticSCM instead of Collab:
+# /.plastic/
+
+# ============ Addressables / Shader Cache ============
+/Assets/StreamingAssets/aa/*
+/Library/ShaderCache/
+*.shadergraph.meta
+
+# ============ TextMesh Pro ============
+/Assets/TextMesh Pro/Resources/*.asset
+
+# ============ Cache for builds ============
+/BuildReport/
