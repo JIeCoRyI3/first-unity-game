@@ -1,5 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 public class SnakeGame : MonoBehaviour
 {
@@ -41,12 +44,15 @@ public class SnakeGame : MonoBehaviour
     {
         HandleInput();
 
+        // Allow restart at any time
+        if (GetRestartPressed())
+        {
+            StartNewGame();
+            return;
+        }
+
         if (!isAlive)
         {
-            if (Input.GetKeyDown(KeyCode.R))
-            {
-                StartNewGame();
-            }
             return;
         }
 
@@ -119,6 +125,33 @@ public class SnakeGame : MonoBehaviour
     private void HandleInput()
     {
         // Read last arrow key pressed and set as next direction if not opposite
+#if ENABLE_INPUT_SYSTEM
+        var kb = Keyboard.current;
+        if (kb != null)
+        {
+            if (kb.upArrowKey.wasPressedThisFrame)
+            {
+                TrySetNextDirection(Vector2Int.up);
+                return;
+            }
+            if (kb.downArrowKey.wasPressedThisFrame)
+            {
+                TrySetNextDirection(Vector2Int.down);
+                return;
+            }
+            if (kb.leftArrowKey.wasPressedThisFrame)
+            {
+                TrySetNextDirection(Vector2Int.left);
+                return;
+            }
+            if (kb.rightArrowKey.wasPressedThisFrame)
+            {
+                TrySetNextDirection(Vector2Int.right);
+                return;
+            }
+        }
+#endif
+
         if (Input.GetKeyDown(KeyCode.UpArrow))
         {
             TrySetNextDirection(Vector2Int.up);
@@ -135,6 +168,18 @@ public class SnakeGame : MonoBehaviour
         {
             TrySetNextDirection(Vector2Int.right);
         }
+    }
+
+    private bool GetRestartPressed()
+    {
+#if ENABLE_INPUT_SYSTEM
+        var kb = Keyboard.current;
+        if (kb != null && kb.rKey.wasPressedThisFrame)
+        {
+            return true;
+        }
+#endif
+        return Input.GetKeyDown(KeyCode.R);
     }
 
     private void TrySetNextDirection(Vector2Int desired)
