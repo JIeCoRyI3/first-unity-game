@@ -52,10 +52,20 @@ public class SnakeGame : MonoBehaviour
     private bool foodNeedsSprite;
     private GameObject gameOverCanvasGO;
 
+    [Header("Audio")]
+    [SerializeField, Tooltip("Enable/disable all game sounds")] private bool enableSound = true;
+    [SerializeField, Range(0f, 1f), Tooltip("Master volume for SFX")] private float sfxVolume = 0.8f;
+    private AudioSource audioSource;
+    private AudioClip sfxMove;
+    private AudioClip sfxTurn;
+    private AudioClip sfxEat;
+    private AudioClip sfxDeath;
+
     private void Start()
     {
         SetupCamera();
         EnsureRuntimeAssets();
+        EnsureAudio();
         StartNewGame();
     }
 
@@ -227,6 +237,7 @@ public class SnakeGame : MonoBehaviour
     private void StepGame()
     {
         // Apply buffered direction exactly on tick
+        bool turnedThisStep = currentDirection != nextDirection;
         currentDirection = nextDirection;
 
         var currentHead = snakeCells.First.Value;
@@ -249,6 +260,7 @@ public class SnakeGame : MonoBehaviour
 
         if (outOfBounds || hitsSelf)
         {
+            PlaySfx(sfxDeath, 1f);
             GameOver();
             return;
         }
@@ -259,6 +271,8 @@ public class SnakeGame : MonoBehaviour
 
         if (willGrow)
         {
+            // Play eat sound for collecting food; supersedes move/turn sound this tick
+            PlaySfx(sfxEat, 1f);
             SpawnFood();
         }
         else
@@ -267,6 +281,16 @@ public class SnakeGame : MonoBehaviour
             var tail = snakeCells.Last.Value;
             snakeCells.RemoveLast();
             snakeCellSet.Remove(tail);
+            // Play movement sound every step; add turn sound when direction changed
+            if (turnedThisStep)
+            {
+                PlaySfx(sfxMove, 1f);
+                PlaySfx(sfxTurn, 1f);
+            }
+            else
+            {
+                PlaySfx(sfxMove, 1f);
+            }
         }
 
         RenderWorld(fullRebuild: false);
@@ -322,6 +346,134 @@ public class SnakeGame : MonoBehaviour
         Debug.Log("Game Over. Press R to restart.");
 #endif
         ShowGameOverUI();
+    }
+
+    private void EnsureAudio()
+    {
+        if (!enableSound) return;
+        if (audioSource == null)
+        {
+            audioSource = gameObject.GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+                audioSource.playOnAwake = false;
+                audioSource.spatialBlend = 0f; // 2D audio
+            }
+        }
+        audioSource.volume = 1f; // we'll control loudness per one-shot via sfxVolume multiplier
+
+        // Lazily build clips if missing
+        if (sfxMove == null)
+        {
+            // Short, light beep
+            sfxMove = CreateToneClip(
+                name: "sfx_move",
+                durationSeconds: 0.055f,
+                startFrequencyHz: 520f,
+                endFrequencyHz: 560f,
+                gain: 0.35f,
+                waveform: Waveform.Sine,
+                attackSeconds: 0.002f,
+                releaseSeconds: 0.05f
+            );
+        }
+        if (sfxTurn == null)
+        {
+            // Short, dull low thud-like tone
+            sfxTurn = CreateToneClip(
+                name: "sfx_turn",
+                durationSeconds: 0.07f,
+                startFrequencyHz: 170f,
+                endFrequencyHz: 150f,
+                gain: 0.45f,
+                waveform: Waveform.Sine,
+                attackSeconds: 0.001f,
+                releaseSeconds: 0.06f
+            );
+        }
+        if (sfxEat == null)
+        {
+            // High, short upward chirp
+            sfxEat = CreateToneClip(
+                name: "sfx_eat",
+                durationSeconds: 0.09f,
+                startFrequencyHz: 950f,
+                endFrequencyHz: 1400f,
+                gain: 0.4f,
+                waveform: Waveform.Sine,
+                attackSeconds: 0.001f,
+                releaseSeconds: 0.05f
+            );
+        }
+        if (sfxDeath == null)
+        {
+            // Long, sad downward glide
+            sfxDeath = CreateToneClip(
+                name: "sfx_death",
+                durationSeconds: 1.1f,
+                startFrequencyHz: 360f,
+                endFrequencyHz: 110f,
+                gain: 0.5f,
+                waveform: Waveform.Sine,
+                attackSeconds: 0.005f,
+                releaseSeconds: 0.35f
+            );
+        }
+    }
+
+    private void PlaySfx(AudioClip clip, float volume = 1f)
+    {
+        if (!enableSound || clip == null) return;
+        if (audioSource == null)
+        {
+            EnsureAudio();
+            if (audioSource == null) return;
+        }
+        audioSource.PlayOneShot(clip, Mathf.Clamp01(volume) * sfxVolume);
+    }
+
+    private enum Waveform
+    {
+        Sine,
+        Square
+    }
+
+    private AudioClip CreateToneClip(string name, float durationSeconds, float startFrequencyHz, float endFrequencyHz, float gain, Waveform waveform, float attackSeconds, float releaseSeconds)
+    {
+        const int sampleRate = 44100;
+        int sampleCount = Mathf.Max(1, Mathf.CeilToInt(sampleRate * durationSeconds));
+        var data = new float[sampleCount];
+        float phase = 0f;
+        float twoPi = 2f * Mathf.PI;
+        float attackFrac = Mathf.Clamp01(attackSeconds / Mathf.Max(0.0001f, durationSeconds));
+        float releaseFrac = Mathf.Clamp01(releaseSeconds / Mathf.Max(0.0001f, durationSeconds));
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float progress = sampleCount > 1 ? (i / (float)(sampleCount - 1)) : 0f; // 0..1
+            float freq = Mathf.Lerp(startFrequencyHz, endFrequencyHz, progress);
+            phase += twoPi * freq / sampleRate;
+            if (phase > twoPi) phase -= twoPi;
+            float raw = waveform == Waveform.Sine ? Mathf.Sin(phase) : Mathf.Sign(Mathf.Sin(phase));
+
+            // Simple AR envelope
+            float amp = gain;
+            if (attackFrac > 0f && progress < attackFrac)
+            {
+                amp *= (progress / attackFrac);
+            }
+            else if (releaseFrac > 0f && progress > 1f - releaseFrac)
+            {
+                float relPos = (progress - (1f - releaseFrac)) / releaseFrac;
+                amp *= (1f - relPos);
+            }
+
+            data[i] = raw * amp;
+        }
+
+        var clip = AudioClip.Create(name, sampleCount, 1, sampleRate, false);
+        clip.SetData(data, 0);
+        return clip;
     }
 
     private void RenderWorld(bool fullRebuild)
