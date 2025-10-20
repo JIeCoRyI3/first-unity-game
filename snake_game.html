@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Змейка</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+        }
+
+        .game-container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .score-board {
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            color: #555;
+            font-weight: bold;
+        }
+
+        canvas {
+            border: 4px solid #333;
+            border-radius: 10px;
+            background: #f0f0f0;
+            display: block;
+            margin: 0 auto;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls {
+            margin-top: 20px;
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .game-over {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 40px 60px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        .game-over h2 {
+            margin: 0 0 20px 0;
+            font-size: 2.5em;
+            color: #ff4757;
+        }
+
+        .game-over p {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+        }
+
+        .game-over button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .game-over button:hover {
+            background: #764ba2;
+        }
+
+        .arrow-keys {
+            margin-top: 15px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🐍 Змейка</h1>
+        <div class="score-board">
+            Счёт: <span id="score">0</span>
+        </div>
+        <canvas id="gameCanvas" width="480" height="480"></canvas>
+        <div class="controls">
+            <p>Используйте стрелки для управления</p>
+            <div class="arrow-keys">⬆️ ⬇️ ⬅️ ➡️</div>
+        </div>
+    </div>
+
+    <div class="game-over" id="gameOver">
+        <h2>Игра окончена!</h2>
+        <p>Ваш счёт: <span id="finalScore">0</span></p>
+        <button onclick="restartGame()">Играть снова</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const finalScoreElement = document.getElementById('finalScore');
+        const gameOverElement = document.getElementById('gameOver');
+
+        // Настройки игры
+        const GRID_SIZE = 16;
+        const CELL_SIZE = canvas.width / GRID_SIZE;
+        const GAME_SPEED = 150; // миллисекунды
+
+        // Игровые переменные
+        let snake = [];
+        let direction = { x: 1, y: 0 };
+        let nextDirection = { x: 1, y: 0 };
+        let food = null;
+        let score = 0;
+        let gameLoop = null;
+        let isGameOver = false;
+
+        // Инициализация игры
+        function initGame() {
+            // Создаем змейку длиной 2 клетки
+            snake = [
+                { x: 7, y: 8 },
+                { x: 6, y: 8 }
+            ];
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            score = 0;
+            isGameOver = false;
+            scoreElement.textContent = score;
+            gameOverElement.style.display = 'none';
+            
+            generateFood();
+            
+            if (gameLoop) {
+                clearInterval(gameLoop);
+            }
+            gameLoop = setInterval(update, GAME_SPEED);
+        }
+
+        // Генерация еды
+        function generateFood() {
+            let validPosition = false;
+            let newFood;
+            
+            while (!validPosition) {
+                newFood = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+                
+                // Проверяем, что еда не появилась на змейке
+                validPosition = !snake.some(segment => 
+                    segment.x === newFood.x && segment.y === newFood.y
+                );
+            }
+            
+            food = newFood;
+        }
+
+        // Обновление игры
+        function update() {
+            if (isGameOver) return;
+
+            direction = { ...nextDirection };
+
+            // Вычисляем новую позицию головы
+            const newHead = {
+                x: snake[0].x + direction.x,
+                y: snake[0].y + direction.y
+            };
+
+            // Проверка столкновения с краями
+            if (newHead.x < 0 || newHead.x >= GRID_SIZE || 
+                newHead.y < 0 || newHead.y >= GRID_SIZE) {
+                endGame();
+                return;
+            }
+
+            // Проверка столкновения с собственным телом
+            if (snake.some(segment => segment.x === newHead.x && segment.y === newHead.y)) {
+                endGame();
+                return;
+            }
+
+            // Добавляем новую голову
+            snake.unshift(newHead);
+
+            // Проверка поедания еды
+            if (newHead.x === food.x && newHead.y === food.y) {
+                score++;
+                scoreElement.textContent = score;
+                generateFood();
+            } else {
+                // Убираем хвост, если не съели еду
+                snake.pop();
+            }
+
+            draw();
+        }
+
+        // Отрисовка игры
+        function draw() {
+            // Очистка canvas
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Рисуем сетку
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * CELL_SIZE, 0);
+                ctx.lineTo(i * CELL_SIZE, canvas.height);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(0, i * CELL_SIZE);
+                ctx.lineTo(canvas.width, i * CELL_SIZE);
+                ctx.stroke();
+            }
+
+            // Рисуем еду
+            ctx.fillStyle = '#ff4757';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff4757';
+            ctx.beginPath();
+            ctx.arc(
+                food.x * CELL_SIZE + CELL_SIZE / 2,
+                food.y * CELL_SIZE + CELL_SIZE / 2,
+                CELL_SIZE / 2 - 2,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Рисуем змейку
+            snake.forEach((segment, index) => {
+                if (index === 0) {
+                    // Голова змейки
+                    ctx.fillStyle = '#2ed573';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#2ed573';
+                } else {
+                    // Тело змейки
+                    ctx.fillStyle = '#26de81';
+                    ctx.shadowBlur = 5;
+                    ctx.shadowColor = '#26de81';
+                }
+                
+                ctx.beginPath();
+                ctx.roundRect(
+                    segment.x * CELL_SIZE + 2,
+                    segment.y * CELL_SIZE + 2,
+                    CELL_SIZE - 4,
+                    CELL_SIZE - 4,
+                    5
+                );
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+        }
+
+        // Завершение игры
+        function endGame() {
+            isGameOver = true;
+            clearInterval(gameLoop);
+            finalScoreElement.textContent = score;
+            gameOverElement.style.display = 'block';
+        }
+
+        // Перезапуск игры
+        function restartGame() {
+            initGame();
+        }
+
+        // Управление
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp':
+                    if (direction.y === 0) {
+                        nextDirection = { x: 0, y: -1 };
+                    }
+                    e.preventDefault();
+                    break;
+                case 'ArrowDown':
+                    if (direction.y === 0) {
+                        nextDirection = { x: 0, y: 1 };
+                    }
+                    e.preventDefault();
+                    break;
+                case 'ArrowLeft':
+                    if (direction.x === 0) {
+                        nextDirection = { x: -1, y: 0 };
+                    }
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                    if (direction.x === 0) {
+                        nextDirection = { x: 1, y: 0 };
+                    }
+                    e.preventDefault();
+                    break;
+            }
+        });
+
+        // Полифилл для roundRect (для старых браузеров)
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2;
+                if (h < 2 * r) r = h / 2;
+                this.beginPath();
+                this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r);
+                this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r);
+                this.arcTo(x, y, x + w, y, r);
+                this.closePath();
+                return this;
+            };
+        }
+
+        // Запуск игры
+        initGame();
+    </script>
+</body>
+</html>
