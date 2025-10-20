@@ -25,7 +25,8 @@ public class SnakeController : MonoBehaviour
         InitializeSnake();
         
         Debug.Log("=== Snake Game Started ===");
-        Debug.Log($"Use Arrow Keys or WASD to move the snake!");
+        Debug.Log($"Press ANY ARROW KEY or WASD to start moving!");
+        Debug.Log($"Input System Check: Time.frameCount = {Time.frameCount}");
     }
 
     private Sprite CreateSquareSprite()
@@ -60,7 +61,6 @@ public class SnakeController : MonoBehaviour
         gameStarted = false;
         
         Debug.Log($"Snake initialized at position ({startX}, {startY}) with {snakeBody.Count} segments");
-        Debug.Log($"Snake body: Head at ({snakeBody[0].x}, {snakeBody[0].y}), Tail at ({snakeBody[snakeBody.Count-1].x}, {snakeBody[snakeBody.Count-1].y})");
     }
 
     private void CreateSnakeSegment(Vector2Int gridPos, bool isHead)
@@ -104,87 +104,88 @@ public class SnakeController : MonoBehaviour
 
     private void HandleInput()
     {
-        bool inputReceived = false;
+        // Метод 1: Проверка через GetKeyDown (должна работать с обеими системами)
+        bool inputDetected = false;
         
-        // Управление стрелками
-        if (Input.GetKeyDown(KeyCode.UpArrow))
+        if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
         {
             if (direction != Vector2Int.down)
             {
                 nextDirection = Vector2Int.up;
-                inputReceived = true;
                 gameStarted = true;
-            }
-        }
-        else if (Input.GetKeyDown(KeyCode.DownArrow))
-        {
-            if (direction != Vector2Int.up)
-            {
-                nextDirection = Vector2Int.down;
-                inputReceived = true;
-                gameStarted = true;
-            }
-        }
-        else if (Input.GetKeyDown(KeyCode.LeftArrow))
-        {
-            if (direction != Vector2Int.right)
-            {
-                nextDirection = Vector2Int.left;
-                inputReceived = true;
-                gameStarted = true;
-            }
-        }
-        else if (Input.GetKeyDown(KeyCode.RightArrow))
-        {
-            if (direction != Vector2Int.left)
-            {
-                nextDirection = Vector2Int.right;
-                inputReceived = true;
-                gameStarted = true;
-            }
-        }
-
-        // Дополнительное управление WASD
-        if (Input.GetKeyDown(KeyCode.W))
-        {
-            if (direction != Vector2Int.down)
-            {
-                nextDirection = Vector2Int.up;
-                inputReceived = true;
-                gameStarted = true;
-            }
-        }
-        else if (Input.GetKeyDown(KeyCode.S))
-        {
-            if (direction != Vector2Int.up)
-            {
-                nextDirection = Vector2Int.down;
-                inputReceived = true;
-                gameStarted = true;
-            }
-        }
-        else if (Input.GetKeyDown(KeyCode.A))
-        {
-            if (direction != Vector2Int.right)
-            {
-                nextDirection = Vector2Int.left;
-                inputReceived = true;
-                gameStarted = true;
-            }
-        }
-        else if (Input.GetKeyDown(KeyCode.D))
-        {
-            if (direction != Vector2Int.left)
-            {
-                nextDirection = Vector2Int.right;
-                inputReceived = true;
-                gameStarted = true;
+                inputDetected = true;
+                Debug.Log("<color=yellow>⬆️ UP detected via GetKeyDown!</color>");
             }
         }
         
-        if (inputReceived)
+        if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
         {
-            Debug.Log($"Input received: Moving {nextDirection}");
+            if (direction != Vector2Int.up)
+            {
+                nextDirection = Vector2Int.down;
+                gameStarted = true;
+                inputDetected = true;
+                Debug.Log("<color=yellow>⬇️ DOWN detected via GetKeyDown!</color>");
+            }
+        }
+        
+        if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
+        {
+            if (direction != Vector2Int.right)
+            {
+                nextDirection = Vector2Int.left;
+                gameStarted = true;
+                inputDetected = true;
+                Debug.Log("<color=yellow>⬅️ LEFT detected via GetKeyDown!</color>");
+            }
+        }
+        
+        if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
+        {
+            if (direction != Vector2Int.left)
+            {
+                nextDirection = Vector2Int.right;
+                gameStarted = true;
+                inputDetected = true;
+                Debug.Log("<color=yellow>➡️ RIGHT detected via GetKeyDown!</color>");
+            }
+        }
+        
+        // Метод 2: Проверка через Input.GetAxisRaw (запасной вариант)
+        if (!inputDetected && !gameStarted)
+        {
+            float horizontal = Input.GetAxisRaw("Horizontal");
+            float vertical = Input.GetAxisRaw("Vertical");
+            
+            if (Mathf.Abs(horizontal) > 0.1f || Mathf.Abs(vertical) > 0.1f)
+            {
+                Debug.Log($"<color=cyan>Axis input detected: H={horizontal}, V={vertical}</color>");
+                
+                if (vertical > 0.1f && direction != Vector2Int.down)
+                {
+                    nextDirection = Vector2Int.up;
+                    gameStarted = true;
+                    Debug.Log("<color=yellow>⬆️ UP detected via Axis!</color>");
+                }
+                else if (vertical < -0.1f && direction != Vector2Int.up)
+                {
+                    nextDirection = Vector2Int.down;
+                    gameStarted = true;
+                    Debug.Log("<color=yellow>⬇️ DOWN detected via Axis!</color>");
+                }
+                else if (horizontal < -0.1f && direction != Vector2Int.right)
+                {
+                    nextDirection = Vector2Int.left;
+                    gameStarted = true;
+                    Debug.Log("<color=yellow>⬅️ LEFT detected via Axis!</color>");
+                }
+                else if (horizontal > 0.1f && direction != Vector2Int.left)
+                {
+                    nextDirection = Vector2Int.right;
+                    gameStarted = true;
+                    Debug.Log("<color=yellow>➡️ RIGHT detected via Axis!</color>");
+                }
+            }
         }
     }
 
@@ -198,19 +199,16 @@ public class SnakeController : MonoBehaviour
         // Вычисляем новую позицию головы
         Vector2Int newHead = snakeBody[0] + direction;
 
-        Debug.Log($"Moving to ({newHead.x}, {newHead.y}), Direction: {direction}");
-
         // Проверка столкновения с краями
         if (!GameManager.Instance.IsValidPosition(newHead.x, newHead.y))
         {
-            Debug.Log($"<color=red>Game Over: Hit wall at ({newHead.x}, {newHead.y})</color>");
+            Debug.Log($"<color=red>💀 Game Over: Hit wall at ({newHead.x}, {newHead.y})</color>");
             GameOver();
             return;
         }
 
         // Проверка столкновения с собственным телом
-        // ВАЖНО: Не проверяем последний элемент (хвост), так как он удалится при движении
-        // Проверяем только если не съедим еду
+        // Не проверяем последний элемент (хвост), так как он удалится при движении
         FoodSpawner foodSpawner = FindObjectOfType<FoodSpawner>();
         bool willEatFood = foodSpawner != null && foodSpawner.IsFoodAtPosition(newHead);
         
@@ -221,7 +219,7 @@ public class SnakeController : MonoBehaviour
             {
                 if (snakeBody[i] == newHead)
                 {
-                    Debug.Log($"<color=red>Game Over: Hit self at ({newHead.x}, {newHead.y})</color>");
+                    Debug.Log($"<color=red>💀 Game Over: Hit self at ({newHead.x}, {newHead.y})</color>");
                     GameOver();
                     return;
                 }
@@ -234,7 +232,7 @@ public class SnakeController : MonoBehaviour
             {
                 if (snakeBody[i] == newHead)
                 {
-                    Debug.Log($"<color=red>Game Over: Hit self at ({newHead.x}, {newHead.y})</color>");
+                    Debug.Log($"<color=red>💀 Game Over: Hit self at ({newHead.x}, {newHead.y})</color>");
                     GameOver();
                     return;
                 }
@@ -251,7 +249,7 @@ public class SnakeController : MonoBehaviour
             // Съели еду - не удаляем хвост
             foodSpawner.OnFoodEaten();
             GameManager.Instance.AddScore(1);
-            Debug.Log($"<color=green>Food eaten! Score: {GameManager.Instance.GetScore()}, Length: {snakeBody.Count}</color>");
+            Debug.Log($"<color=green>🍎 Food eaten! Score: {GameManager.Instance.GetScore()}, Length: {snakeBody.Count}</color>");
         }
         else
         {
@@ -293,7 +291,7 @@ public class SnakeController : MonoBehaviour
     private void GameOver()
     {
         isGameOver = true;
-        Debug.Log("<color=red>=== GAME OVER ===</color>");
+        Debug.Log("<color=red>=== 💀 GAME OVER 💀 ===</color>");
         GameManager.Instance.GameOver();
     }
 
