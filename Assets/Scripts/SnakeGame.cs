@@ -47,6 +47,7 @@ public class SnakeGame : MonoBehaviour
     private GameObject borderLeft;
     private GameObject borderRight;
     private readonly List<GameObject> segmentObjects = new List<GameObject>();
+    private readonly List<Transform> segmentArrowTransforms = new List<Transform>();
     // Food rendering (now supports multiple food items)
     private GameObject foodObject; // legacy (unused in multi-food mode)
     private List<Vector2Int> foodCells;
@@ -54,6 +55,7 @@ public class SnakeGame : MonoBehaviour
     private int maxFoodCount = 1;
     private Sprite cellSprite;
     private Sprite snakeSprite;
+    private Sprite arrowSprite;
     private Sprite[] foodSprites;
     private bool foodNeedsSprite;
     private GameObject gameOverCanvasGO;
@@ -163,6 +165,10 @@ public class SnakeGame : MonoBehaviour
         if (snakeSprite == null)
         {
             snakeSprite = GenerateSnakeSprite();
+        }
+        if (arrowSprite == null)
+        {
+            arrowSprite = GenerateArrowSprite();
         }
         if (foodSprites == null || foodSprites.Length != 5)
         {
@@ -561,6 +567,7 @@ public class SnakeGame : MonoBehaviour
 
         // Position and color segments
         int index = 0;
+        Vector2Int? prevCell = null;
         foreach (var cell in snakeCells)
         {
             var go = segmentObjects[index];
@@ -569,6 +576,30 @@ public class SnakeGame : MonoBehaviour
             var sr = go.GetComponent<SpriteRenderer>();
             sr.sprite = snakeSprite;
             sr.color = Color.white;
+            // Handle arrow rotation per segment
+            if (index < segmentArrowTransforms.Count)
+            {
+                var arrow = segmentArrowTransforms[index];
+                if (arrow != null)
+                {
+                    Vector2Int dir;
+                    if (index == 0)
+                    {
+                        dir = currentDirection;
+                    }
+                    else
+                    {
+                        dir = prevCell.HasValue ? (prevCell.Value - cell) : Vector2Int.up;
+                    }
+                    float zRot = 0f;
+                    if (dir == Vector2Int.up) zRot = 0f;
+                    else if (dir == Vector2Int.right) zRot = -90f;
+                    else if (dir == Vector2Int.down) zRot = 180f;
+                    else if (dir == Vector2Int.left) zRot = 90f;
+                    arrow.localRotation = Quaternion.Euler(0f, 0f, zRot);
+                }
+            }
+            prevCell = cell;
             index++;
         }
         // Disable any extras
@@ -587,6 +618,14 @@ public class SnakeGame : MonoBehaviour
         {
             var go = CreateCellGO("SnakeSegment", Color.white, snakeSprite);
             segmentObjects.Add(go);
+            // Add arrow child to visualize direction
+            var arrow = new GameObject("Arrow");
+            arrow.transform.SetParent(go.transform, false);
+            var srA = arrow.AddComponent<SpriteRenderer>();
+            srA.sprite = arrowSprite;
+            srA.color = new Color(0.95f, 0.98f, 1f, 0.92f);
+            srA.sortingOrder = 1;
+            segmentArrowTransforms.Add(arrow.transform);
         }
     }
 
@@ -756,6 +795,12 @@ public class SnakeGame : MonoBehaviour
         if (eatenIndex >= 0 && eatenIndex < (foodCells?.Count ?? 0))
         {
             foodCells.RemoveAt(eatenIndex);
+            if (foodObjects != null && eatenIndex < foodObjects.Count)
+            {
+                var obj = foodObjects[eatenIndex];
+                if (obj != null) Destroy(obj);
+                foodObjects.RemoveAt(eatenIndex);
+            }
         }
         AddXp(xpPerFood);
         EnsureFoodCount();
@@ -957,6 +1002,36 @@ public class SnakeGame : MonoBehaviour
         sprites[3] = GenerateSolidCircleSprite(8, new Color(0.55f, 0.45f, 0.9f, 1f), new Color(0.35f, 0.25f, 0.7f, 1f)); // purple
         sprites[4] = GenerateSolidCircleSprite(8, new Color(0.25f, 0.75f, 1.0f, 1f), new Color(0.05f, 0.45f, 0.8f, 1f)); // blue
         return sprites;
+    }
+
+    private Sprite GenerateArrowSprite()
+    {
+        const int size = 8;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.name = "ArrowTexture";
+        tex.filterMode = FilterMode.Point;
+        var transparent = new Color(0, 0, 0, 0);
+        var arrow = new Color(0.95f, 0.98f, 1f, 1f);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                tex.SetPixel(x, y, transparent);
+            }
+        }
+        // Shaft (pointing up)
+        for (int y = 0; y <= 5; y++)
+        {
+            tex.SetPixel(3, y, arrow);
+            tex.SetPixel(4, y, arrow);
+        }
+        // Head rows
+        int y6 = 6;
+        for (int x = 2; x <= 5; x++) tex.SetPixel(x, y6, arrow);
+        int y7 = 7;
+        for (int x = 1; x <= 6; x++) tex.SetPixel(x, y7, arrow);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
     }
 
     private Sprite GenerateSolidCircleSprite(int size, Color fill, Color border)
