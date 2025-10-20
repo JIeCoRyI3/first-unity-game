@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 public class SnakeController : MonoBehaviour
 {
     [Header("Movement Settings")]
-    public float moveInterval = 0.15f;
+    public float moveInterval = 0.5f;  // Замедлено для видимости
 
     [Header("Snake Settings")]
     public int initialLength = 2;
@@ -86,20 +86,36 @@ public class SnakeController : MonoBehaviour
         sr.sortingOrder = 1;
         
         segment.transform.localScale = new Vector3(
-            GameManager.Instance.cellSize * 0.9f,
-            GameManager.Instance.cellSize * 0.9f,
+            GameManager.Instance.cellSize * 0.85f,
+            GameManager.Instance.cellSize * 0.85f,
             1f
         );
 
         snakeSegments.Add(segment);
+        
+        Debug.Log($"🟢 Created segment at ({gridPos.x}, {gridPos.y}), World: {worldPos}, Color: {(isHead ? "HEAD" : "BODY")}");
     }
 
     private void Update()
     {
-        if (isGameOver) return;
+        if (isGameOver)
+        {
+            if (Time.frameCount % 120 == 0)
+            {
+                Debug.Log("💀 Game is over, waiting for restart...");
+            }
+            return;
+        }
+        
         HandleInput();
 
         moveTimer += Time.deltaTime;
+        
+        if (gameStarted && Time.frameCount % 30 == 0)
+        {
+            Debug.Log($"⏱️ Move timer: {moveTimer:F2}/{moveInterval:F2}");
+        }
+        
         if (moveTimer >= moveInterval)
         {
             moveTimer = 0f;
@@ -226,10 +242,16 @@ public class SnakeController : MonoBehaviour
 
     private void Move()
     {
-        if (!gameStarted) return;
+        if (!gameStarted)
+        {
+            Debug.Log("⏸️ Game not started yet, waiting for input...");
+            return;
+        }
         
         direction = nextDirection;
         Vector2Int newHead = snakeBody[0] + direction;
+        
+        Debug.Log($"🐍 MOVING from ({snakeBody[0].x}, {snakeBody[0].y}) to ({newHead.x}, {newHead.y})");
 
         if (!GameManager.Instance.IsValidPosition(newHead.x, newHead.y))
         {
