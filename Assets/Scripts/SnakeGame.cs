@@ -37,6 +37,7 @@ public class SnakeGame : MonoBehaviour
     private bool isAlive;
     private bool isPaused;
     private float moveTimer;
+    private float defaultMoveIntervalSeconds;
 
     // Rendering
     private Transform renderContainer;
@@ -92,6 +93,8 @@ public class SnakeGame : MonoBehaviour
         EnsureAudio();
         EnsureEventSystemExists();
         EnsureHudExists();
+        // Capture default speed so upgrades don't persist across restarts
+        defaultMoveIntervalSeconds = moveIntervalSeconds;
         StartNewGame();
     }
 
@@ -125,8 +128,13 @@ public class SnakeGame : MonoBehaviour
         if (cam == null) return;
 
         cam.orthographic = true;
-        // Fit height to grid, add small margin so borders are visible
-        cam.orthographicSize = (gridHeight * 0.5f) + 0.5f;
+        // Fit entire grid in view accounting for aspect ratio; add margin for borders
+        float margin = 0.6f;
+        float halfHeight = (gridHeight * 0.5f) + margin;
+        float halfWidth = (gridWidth * 0.5f) + margin;
+        float sizeByHeight = halfHeight;
+        float sizeByWidth = cam.aspect > 0f ? (halfWidth / cam.aspect) : halfHeight;
+        cam.orthographicSize = Mathf.Max(sizeByHeight, sizeByWidth);
         cam.transform.position = new Vector3((gridWidth - 1) * 0.5f, (gridHeight - 1) * 0.5f, -10f);
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = backgroundColor;
@@ -172,6 +180,7 @@ public class SnakeGame : MonoBehaviour
         moveTimer = 0f;
         isAlive = true;
         isPaused = false;
+        moveIntervalSeconds = defaultMoveIntervalSeconds;
         foodNeedsSprite = false;
         pendingLevelUps = 0;
 
@@ -370,6 +379,8 @@ public class SnakeGame : MonoBehaviour
                 foodCells.Add(p);
                 // Ensure there is a visual object for this food
                 EnsureFoodObjectForIndex(foodCells.Count - 1);
+                // Randomize sprite each time we spawn a food
+                SetFoodSpriteForIndex(foodCells.Count - 1);
                 RenderFood();
                 return;
             }
@@ -385,6 +396,7 @@ public class SnakeGame : MonoBehaviour
                 {
                     foodCells.Add(p);
                     EnsureFoodObjectForIndex(foodCells.Count - 1);
+                    SetFoodSpriteForIndex(foodCells.Count - 1);
                     RenderFood();
                     return;
                 }
@@ -613,11 +625,26 @@ public class SnakeGame : MonoBehaviour
         if (renderContainer == null) EnsureRuntimeAssets();
         while (foodObjects.Count <= index)
         {
-            var sprite = (foodSprites != null && foodSprites.Length > 0)
-                ? foodSprites[Random.Range(0, foodSprites.Length)]
-                : cellSprite;
-            var go = CreateCellGO("Food", Color.white, sprite);
+            var go = CreateCellGO("Food", Color.white, cellSprite);
             foodObjects.Add(go);
+        }
+    }
+
+    private void SetFoodSpriteForIndex(int index)
+    {
+        if (index < 0 || index >= foodObjects.Count) return;
+        var obj = foodObjects[index];
+        if (obj == null) return;
+        var sr = obj.GetComponent<SpriteRenderer>();
+        if (sr == null) return;
+        if (foodSprites != null && foodSprites.Length > 0)
+        {
+            int idx = Random.Range(0, foodSprites.Length);
+            sr.sprite = foodSprites[idx];
+        }
+        else
+        {
+            sr.sprite = cellSprite;
         }
     }
 
