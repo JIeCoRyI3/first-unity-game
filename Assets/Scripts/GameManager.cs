@@ -30,21 +30,37 @@ public class GameManager : MonoBehaviour
         if (Instance == null)
         {
             Instance = this;
+            Debug.Log("✅ GameManager Instance created");
         }
         else
         {
+            Debug.LogWarning("⚠️ Duplicate GameManager destroyed");
             Destroy(gameObject);
         }
+        
+        // КРИТИЧЕСКИ ВАЖНО: Убеждаемся что игра не на паузе
+        Time.timeScale = 1f;
+        Debug.Log("⏱️ Time.timeScale set to 1");
     }
 
     private void Start()
     {
+        Debug.Log("🎮 GameManager.Start() called");
+        
         CreateGrid();
         UpdateScoreUI();
+        
         if (gameOverPanel != null)
         {
             gameOverPanel.SetActive(false);
+            Debug.Log("✅ Game Over Panel hidden");
         }
+        else
+        {
+            Debug.LogWarning("⚠️ Game Over Panel is NULL!");
+        }
+        
+        Debug.Log("✅ GameManager initialized successfully");
     }
 
     private void CreateGrid()
@@ -138,9 +154,16 @@ public class GameManager : MonoBehaviour
 
     public void GameOver()
     {
+        Debug.Log("🎮 GameManager.GameOver() called");
+        
         if (gameOverPanel != null)
         {
             gameOverPanel.SetActive(true);
+            Debug.Log("✅ Game Over Panel shown");
+        }
+        else
+        {
+            Debug.LogError("❌ Game Over Panel is NULL!");
         }
 
         if (finalScoreText != null)
@@ -148,17 +171,22 @@ public class GameManager : MonoBehaviour
             finalScoreText.text = "Ваш счёт: " + score;
         }
 
-        Time.timeScale = 0f;
+        // НЕ ОСТАНАВЛИВАЕМ ВРЕМЯ! Это мешает UI работать
+        // Time.timeScale = 0f;
+        Debug.Log("⚠️ Game Over - Time.timeScale kept at 1 for UI to work");
     }
 
     public void RestartGame()
     {
+        Debug.Log("🔄 Restarting game...");
         Time.timeScale = 1f;
         score = 0;
         UpdateScoreUI();
-        UnityEngine.SceneManagement.SceneManager.LoadScene(
-            UnityEngine.SceneManagement.SceneManager.GetActiveScene().name
-        );
+        
+        string sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        Debug.Log($"🔄 Loading scene: {sceneName}");
+        
+        UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
     }
 
     public int GetScore()
