@@ -184,8 +184,7 @@ public class SnakeGame : MonoBehaviour
                 return;
             }
         }
-#endif
-
+#else
         if (Input.GetKeyDown(KeyCode.UpArrow))
         {
             TrySetNextDirection(Vector2Int.up);
@@ -202,18 +201,17 @@ public class SnakeGame : MonoBehaviour
         {
             TrySetNextDirection(Vector2Int.right);
         }
+#endif
     }
 
     private bool GetRestartPressed()
     {
 #if ENABLE_INPUT_SYSTEM
         var kb = Keyboard.current;
-        if (kb != null && kb.rKey.wasPressedThisFrame)
-        {
-            return true;
-        }
-#endif
+        return kb != null && kb.rKey.wasPressedThisFrame;
+#else
         return Input.GetKeyDown(KeyCode.R);
+#endif
     }
 
     private void TrySetNextDirection(Vector2Int desired)

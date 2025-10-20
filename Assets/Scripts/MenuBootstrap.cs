@@ -3,20 +3,20 @@ using UnityEngine.SceneManagement;
 
 public static class MenuBootstrap
 {
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void EnsureMenuExists()
+    private static bool s_Registered;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void RegisterCallbacks()
     {
-        var activeScene = SceneManager.GetActiveScene();
-        if (activeScene.name != "Menu")
-        {
-            return;
-        }
+        if (s_Registered) return;
+        s_Registered = true;
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
 
-        if (Object.FindObjectOfType<MenuController>() != null)
-        {
-            return;
-        }
-
+    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name != "Menu") return;
+        if (Object.FindObjectOfType<MenuController>() != null) return;
         var go = new GameObject("Menu");
         go.AddComponent<MenuController>();
     }

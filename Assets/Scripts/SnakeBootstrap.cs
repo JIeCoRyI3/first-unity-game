@@ -3,22 +3,21 @@ using UnityEngine.SceneManagement;
 
 public static class SnakeBootstrap
 {
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void EnsureSnakeGameExists()
+    private static bool s_Registered;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void RegisterCallbacks()
     {
-        // Only spawn the Snake game controller inside the Snake scene
-        var activeScene = SceneManager.GetActiveScene();
-        if (activeScene.name != "Snake")
-        {
-            return;
-        }
+        if (s_Registered) return;
+        s_Registered = true;
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
 
+    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name != "Snake") return;
         var existing = Object.FindObjectOfType<SnakeGame>();
-        if (existing != null)
-        {
-            return;
-        }
-
+        if (existing != null) return;
         var controller = new GameObject("SnakeGame");
         controller.AddComponent<SnakeGame>();
     }
