@@ -281,8 +281,16 @@ public class SnakeGame : MonoBehaviour
             var tail = snakeCells.Last.Value;
             snakeCells.RemoveLast();
             snakeCellSet.Remove(tail);
-            // Play movement or turn sound when simply moving
-            PlaySfx(turnedThisStep ? sfxTurn : sfxMove, 1f);
+            // Play movement sound every step; add turn sound when direction changed
+            if (turnedThisStep)
+            {
+                PlaySfx(sfxMove, 1f);
+                PlaySfx(sfxTurn, 1f);
+            }
+            else
+            {
+                PlaySfx(sfxMove, 1f);
+            }
         }
 
         RenderWorld(fullRebuild: false);
