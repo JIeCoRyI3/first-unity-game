@@ -1327,6 +1327,7 @@ GameObject:
   - component: {fileID: 9999999993}
   - component: {fileID: 9999999994}
   - component: {fileID: 9999999996}
+  - component: {fileID: 9999999997}
   m_Layer: 0
   m_Name: InputDebugger
   m_TagString: Untagged
@@ -1407,6 +1408,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c3c4c5c6c7c8c9c0d1d2d3d4d5d6d7d8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &9999999997
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9999999990}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4d5d6d7d8d9d0e1e2e3e4e5e6e7e8e9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1660057539 &9009009009
