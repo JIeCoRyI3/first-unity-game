@@ -37,6 +37,10 @@ public class SnakeGame : MonoBehaviour
     // Rendering
     private Transform renderContainer;
     private Transform borderContainer;
+    private GameObject borderTop;
+    private GameObject borderBottom;
+    private GameObject borderLeft;
+    private GameObject borderRight;
     private readonly List<GameObject> segmentObjects = new List<GameObject>();
     private GameObject foodObject;
     private Sprite cellSprite;
