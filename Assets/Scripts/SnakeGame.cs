@@ -35,6 +35,7 @@ public class SnakeGame : MonoBehaviour
 
     private Vector2Int foodCell;
     private bool isAlive;
+    private bool isPaused;
     private float moveTimer;
 
     // Rendering
@@ -45,12 +46,35 @@ public class SnakeGame : MonoBehaviour
     private GameObject borderLeft;
     private GameObject borderRight;
     private readonly List<GameObject> segmentObjects = new List<GameObject>();
-    private GameObject foodObject;
+    // Food rendering (now supports multiple food items)
+    private GameObject foodObject; // legacy (unused in multi-food mode)
+    private List<Vector2Int> foodCells;
+    private List<GameObject> foodObjects;
+    private int maxFoodCount = 1;
     private Sprite cellSprite;
     private Sprite snakeSprite;
     private Sprite[] foodSprites;
     private bool foodNeedsSprite;
     private GameObject gameOverCanvasGO;
+
+    // Progression / Roguelike
+    [Header("Roguelike Progression")]
+    [SerializeField, Tooltip("XP granted per food collected")] private int xpPerFood = 10;
+    [SerializeField, Tooltip("Base XP required for first level-up")] private int baseXpToNext = 50;
+    [SerializeField, Tooltip("Additional XP required per subsequent level")] private int xpIncreasePerLevel = 5;
+
+    private int playerLevel;
+    private int currentXp;
+    private int xpToNext;
+    private int pendingLevelUps;
+
+    // HUD (top XP bar)
+    private GameObject hudCanvasGO;
+    private Image xpFillImage;
+    private Text xpText;
+
+    // Level-up modal
+    private GameObject levelUpCanvasGO;
 
     [Header("Audio")]
     [SerializeField, Tooltip("Enable/disable all game sounds")] private bool enableSound = true;
@@ -66,6 +90,8 @@ public class SnakeGame : MonoBehaviour
         SetupCamera();
         EnsureRuntimeAssets();
         EnsureAudio();
+        EnsureEventSystemExists();
+        EnsureHudExists();
         StartNewGame();
     }
 
@@ -80,7 +106,7 @@ public class SnakeGame : MonoBehaviour
             return;
         }
 
-        if (!isAlive)
+        if (!isAlive || isPaused)
         {
             return;
         }
@@ -145,7 +171,15 @@ public class SnakeGame : MonoBehaviour
         snakeCellSet = new HashSet<Vector2Int>();
         moveTimer = 0f;
         isAlive = true;
+        isPaused = false;
         foodNeedsSprite = false;
+        pendingLevelUps = 0;
+
+        // Reset progression
+        playerLevel = 1;
+        currentXp = 0;
+        xpToNext = baseXpToNext;
+        UpdateHud();
 
         // Initial snake of length 2, centered
         Vector2Int head = new Vector2Int(gridWidth / 2, gridHeight / 2);
@@ -159,11 +193,16 @@ public class SnakeGame : MonoBehaviour
         currentDirection = Vector2Int.right;
         nextDirection = currentDirection;
 
-        SpawnFood();
+        // Reset foods
+        ClearFoods();
+        maxFoodCount = 1;
+        EnsureFoodContainers();
+        EnsureFoodCount();
         RenderWorld(fullRebuild: true);
 
         // Hide any previous game over UI
         HideGameOverUI();
+        HideLevelUpUI();
     }
 
     private void HandleInput()
@@ -244,7 +283,21 @@ public class SnakeGame : MonoBehaviour
         var nextHead = currentHead + currentDirection;
 
         bool outOfBounds = nextHead.x < 0 || nextHead.x >= gridWidth || nextHead.y < 0 || nextHead.y >= gridHeight;
-        bool willGrow = nextHead == foodCell;
+        int eatenFoodIndex = -1;
+        bool willGrow = false;
+        if (foodCells != null && foodCells.Count > 0)
+        {
+            // Linear scan; food count is small
+            for (int i = 0; i < foodCells.Count; i++)
+            {
+                if (foodCells[i] == nextHead)
+                {
+                    eatenFoodIndex = i;
+                    willGrow = true;
+                    break;
+                }
+            }
+        }
 
         // Check self-collision. Moving into the current tail cell is allowed if we are NOT growing
         bool hitsSelf = false;
@@ -273,7 +326,7 @@ public class SnakeGame : MonoBehaviour
         {
             // Play eat sound for collecting food; supersedes move/turn sound this tick
             PlaySfx(sfxEat, 1f);
-            SpawnFood();
+            OnFoodEaten(eatenFoodIndex);
         }
         else
         {
@@ -298,38 +351,40 @@ public class SnakeGame : MonoBehaviour
 
     private void SpawnFood()
     {
-        // If the board is full, end the game as a win
-        if (snakeCellSet.Count >= gridWidth * gridHeight)
+        // Spawn a single food at a random empty cell (not occupied by snake or existing food)
+        if (foodCells == null) EnsureFoodContainers();
+        int maxCells = gridWidth * gridHeight;
+        if (snakeCellSet.Count + (foodCells?.Count ?? 0) >= maxCells)
         {
             GameOver();
             return;
         }
 
-        // Try random positions until an empty cell is found
         for (int safety = 0; safety < 10000; safety++)
         {
             int x = Random.Range(0, gridWidth);
             int y = Random.Range(0, gridHeight);
             var p = new Vector2Int(x, y);
-            if (!snakeCellSet.Contains(p))
+            if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)))
             {
-                foodCell = p;
-                foodNeedsSprite = true;
+                foodCells.Add(p);
+                // Ensure there is a visual object for this food
+                EnsureFoodObjectForIndex(foodCells.Count - 1);
                 RenderFood();
                 return;
             }
         }
 
-        // Fallback (should never happen)
-        for (int y = 0; y < gridHeight; y++)
+        // Fallback scan
+        for (int yy = 0; yy < gridHeight; yy++)
         {
-            for (int x = 0; x < gridWidth; x++)
+            for (int xx = 0; xx < gridWidth; xx++)
             {
-                var p = new Vector2Int(x, y);
-                if (!snakeCellSet.Contains(p))
+                var p = new Vector2Int(xx, yy);
+                if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)))
                 {
-                    foodCell = p;
-                    foodNeedsSprite = true;
+                    foodCells.Add(p);
+                    EnsureFoodObjectForIndex(foodCells.Count - 1);
                     RenderFood();
                     return;
                 }
@@ -525,21 +580,67 @@ public class SnakeGame : MonoBehaviour
 
     private void RenderFood()
     {
-        if (foodObject == null)
+        if (foodCells == null) return;
+        EnsureFoodContainers();
+        // Ensure there are enough objects to represent current foods
+        while (foodObjects.Count < foodCells.Count)
         {
-            var firstSprite = (foodSprites != null && foodSprites.Length > 0) ? foodSprites[0] : cellSprite;
-            foodObject = CreateCellGO("Food", Color.white, firstSprite);
+            EnsureFoodObjectForIndex(foodObjects.Count);
         }
-        foodObject.SetActive(true);
-        foodObject.transform.position = new Vector3(foodCell.x, foodCell.y, 0f);
-        var sr = foodObject.GetComponent<SpriteRenderer>();
-        if (foodNeedsSprite && foodSprites != null && foodSprites.Length > 0)
+        // Position active
+        for (int i = 0; i < foodObjects.Count; i++)
         {
-            int idx = Random.Range(0, foodSprites.Length);
-            sr.sprite = foodSprites[idx];
-            sr.color = Color.white;
-            foodNeedsSprite = false;
+            bool active = i < foodCells.Count;
+            var obj = foodObjects[i];
+            if (obj == null) continue;
+            obj.SetActive(active);
+            if (active)
+            {
+                var pos = foodCells[i];
+                obj.transform.position = new Vector3(pos.x, pos.y, 0f);
+            }
         }
+    }
+
+    private void EnsureFoodContainers()
+    {
+        if (foodCells == null) foodCells = new List<Vector2Int>();
+        if (foodObjects == null) foodObjects = new List<GameObject>();
+    }
+
+    private void EnsureFoodObjectForIndex(int index)
+    {
+        if (renderContainer == null) EnsureRuntimeAssets();
+        while (foodObjects.Count <= index)
+        {
+            var sprite = (foodSprites != null && foodSprites.Length > 0)
+                ? foodSprites[Random.Range(0, foodSprites.Length)]
+                : cellSprite;
+            var go = CreateCellGO("Food", Color.white, sprite);
+            foodObjects.Add(go);
+        }
+    }
+
+    private void EnsureFoodCount()
+    {
+        if (foodCells == null) EnsureFoodContainers();
+        while (foodCells.Count < maxFoodCount)
+        {
+            SpawnFood();
+        }
+    }
+
+    private void ClearFoods()
+    {
+        if (foodObjects != null)
+        {
+            foreach (var go in foodObjects)
+            {
+                if (go != null) Destroy(go);
+            }
+            foodObjects.Clear();
+        }
+        if (foodCells != null) foodCells.Clear();
     }
 
     private GameObject CreateCellGO(string baseName, Color tint, Sprite sprite)
@@ -598,6 +699,204 @@ public class SnakeGame : MonoBehaviour
         EnsureBorder(ref borderRight, "Right");
         borderRight.transform.position = new Vector3(gridWidth - 0.5f, (gridHeight - 1) * 0.5f, 0f);
         borderRight.transform.localScale = new Vector3(Mathf.Max(0.01f, borderThickness), gridHeight, 1f);
+    }
+
+    // ===== Progression / Leveling =====
+    private void AddXp(int amount)
+    {
+        currentXp += Mathf.Max(0, amount);
+        // Queue level-ups; process one modal at a time
+        while (currentXp >= xpToNext)
+        {
+            currentXp -= xpToNext;
+            playerLevel++;
+            xpToNext = baseXpToNext + (playerLevel - 1) * xpIncreasePerLevel;
+            pendingLevelUps++;
+        }
+        UpdateHud();
+        TryShowLevelUpModal();
+    }
+
+    private void TryShowLevelUpModal()
+    {
+        if (pendingLevelUps <= 0) return;
+        if (levelUpCanvasGO != null) return; // already showing one
+        ShowLevelUpUI();
+    }
+
+    private void OnFoodEaten(int eatenIndex)
+    {
+        if (eatenIndex >= 0 && eatenIndex < (foodCells?.Count ?? 0))
+        {
+            foodCells.RemoveAt(eatenIndex);
+        }
+        AddXp(xpPerFood);
+        EnsureFoodCount();
+    }
+
+    private void EnsureHudExists()
+    {
+        if (hudCanvasGO != null) return;
+        var canvasGO = new GameObject("HUDCanvas");
+        var canvas = canvasGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvasGO.AddComponent<CanvasScaler>();
+        canvasGO.AddComponent<GraphicRaycaster>();
+
+        // Top bar container
+        var barGO = new GameObject("XPBar");
+        barGO.transform.SetParent(canvasGO.transform, false);
+        var barBG = barGO.AddComponent<Image>();
+        barBG.color = new Color(0.08f, 0.1f, 0.14f, 0.9f);
+        // Use 1x1 sprite so UI Image renders correctly
+        barBG.sprite = cellSprite;
+        var barRT = barGO.GetComponent<RectTransform>();
+        barRT.anchorMin = new Vector2(0f, 1f);
+        barRT.anchorMax = new Vector2(1f, 1f);
+        barRT.pivot = new Vector2(0.5f, 1f);
+        barRT.sizeDelta = new Vector2(0, 36);
+        barRT.anchoredPosition = new Vector2(0, 0);
+
+        // Fill
+        var fillGO = new GameObject("Fill");
+        fillGO.transform.SetParent(barGO.transform, false);
+        var fillImg = fillGO.AddComponent<Image>();
+        fillImg.color = new Color(0.2f, 0.6f, 1.0f, 0.9f);
+        fillImg.type = Image.Type.Filled;
+        fillImg.fillMethod = Image.FillMethod.Horizontal;
+        fillImg.fillOrigin = (int)Image.OriginHorizontal.Left;
+        fillImg.sprite = cellSprite;
+        var fillRT = fillGO.GetComponent<RectTransform>();
+        fillRT.anchorMin = new Vector2(0f, 0f);
+        fillRT.anchorMax = new Vector2(1f, 1f);
+        fillRT.offsetMin = new Vector2(2, 2);
+        fillRT.offsetMax = new Vector2(-2, -2);
+
+        // Text
+        var textGO = new GameObject("Text");
+        textGO.transform.SetParent(barGO.transform, false);
+        var text = textGO.AddComponent<Text>();
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.fontSize = 20;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.color = new Color(0.95f, 0.97f, 1f, 1f);
+        var textRT = textGO.GetComponent<RectTransform>();
+        textRT.anchorMin = new Vector2(0f, 0f);
+        textRT.anchorMax = new Vector2(1f, 1f);
+        textRT.offsetMin = Vector2.zero;
+        textRT.offsetMax = Vector2.zero;
+
+        hudCanvasGO = canvasGO;
+        xpFillImage = fillImg;
+        xpText = text;
+    }
+
+    private void UpdateHud()
+    {
+        if (hudCanvasGO == null) return;
+        float fill = (xpToNext > 0) ? Mathf.Clamp01(currentXp / (float)xpToNext) : 0f;
+        if (xpFillImage != null) xpFillImage.fillAmount = fill;
+        if (xpText != null) xpText.text = $"Ур. {playerLevel}  XP {currentXp}/{xpToNext}";
+    }
+
+    private void ShowLevelUpUI()
+    {
+        isPaused = true;
+        EnsureEventSystemExists();
+
+        levelUpCanvasGO = new GameObject("LevelUpCanvas");
+        var canvas = levelUpCanvasGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        levelUpCanvasGO.AddComponent<CanvasScaler>();
+        levelUpCanvasGO.AddComponent<GraphicRaycaster>();
+
+        var panel = new GameObject("Panel");
+        panel.transform.SetParent(levelUpCanvasGO.transform, false);
+        var panelImg = panel.AddComponent<Image>();
+        panelImg.color = new Color(0f, 0f, 0f, 0.6f);
+        var panelRT = panel.GetComponent<RectTransform>();
+        panelRT.anchorMin = new Vector2(0, 0);
+        panelRT.anchorMax = new Vector2(1, 1);
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
+
+        var dialog = new GameObject("Dialog");
+        dialog.transform.SetParent(panel.transform, false);
+        var dialogImg = dialog.AddComponent<Image>();
+        dialogImg.color = new Color(0.12f, 0.14f, 0.18f, 1f);
+        var dialogRT = dialog.GetComponent<RectTransform>();
+        dialogRT.sizeDelta = new Vector2(560, 300);
+        dialogRT.anchorMin = new Vector2(0.5f, 0.5f);
+        dialogRT.anchorMax = new Vector2(0.5f, 0.5f);
+        dialogRT.anchoredPosition = Vector2.zero;
+
+        var v = dialog.AddComponent<VerticalLayoutGroup>();
+        v.childAlignment = TextAnchor.MiddleCenter;
+        v.spacing = 12f;
+        v.padding = new RectOffset(20, 20, 20, 20);
+
+        var titleGO = new GameObject("Title");
+        titleGO.transform.SetParent(dialog.transform, false);
+        var title = titleGO.AddComponent<Text>();
+        title.text = "Повышение уровня! Выберите улучшение";
+        title.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        title.fontSize = 28;
+        title.alignment = TextAnchor.MiddleCenter;
+        title.color = new Color(0.95f, 0.97f, 1f, 1f);
+        var titleLE = titleGO.AddComponent<LayoutElement>();
+        titleLE.minHeight = 56f;
+
+        Button b1 = CreateUIButton(dialog.transform, "+1 еда на поле");
+        b1.onClick.AddListener(() => { ApplyUpgradeExtraFood(); });
+
+        Button b2 = CreateUIButton(dialog.transform, "Увеличить поле на +1×+1");
+        b2.onClick.AddListener(() => { ApplyUpgradeExpandGrid(); });
+
+        Button b3 = CreateUIButton(dialog.transform, "Замедлить время на 5%");
+        b3.onClick.AddListener(() => { ApplyUpgradeSlowTime(); });
+    }
+
+    private void HideLevelUpUI()
+    {
+        if (levelUpCanvasGO != null)
+        {
+            Destroy(levelUpCanvasGO);
+            levelUpCanvasGO = null;
+        }
+        isPaused = false;
+        if (pendingLevelUps > 0 && levelUpCanvasGO == null)
+        {
+            // If more level-ups are queued, show the next one immediately
+            TryShowLevelUpModal();
+        }
+    }
+
+    private void ApplyUpgradeExtraFood()
+    {
+        maxFoodCount += 1;
+        EnsureFoodCount();
+        pendingLevelUps = Mathf.Max(0, pendingLevelUps - 1);
+        HideLevelUpUI();
+    }
+
+    private void ApplyUpgradeExpandGrid()
+    {
+        gridWidth = Mathf.Max(1, gridWidth + 1);
+        gridHeight = Mathf.Max(1, gridHeight + 1);
+        SetupCamera();
+        BuildBorders();
+        // Ensure all objects are within new bounds and re-render
+        RenderWorld(fullRebuild: true);
+        EnsureFoodCount();
+        pendingLevelUps = Mathf.Max(0, pendingLevelUps - 1);
+        HideLevelUpUI();
+    }
+
+    private void ApplyUpgradeSlowTime()
+    {
+        moveIntervalSeconds *= 1.05f; // 5% slower movement (longer interval)
+        pendingLevelUps = Mathf.Max(0, pendingLevelUps - 1);
+        HideLevelUpUI();
     }
 
     private Sprite GenerateSnakeSprite()
