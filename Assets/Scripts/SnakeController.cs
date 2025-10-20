@@ -15,6 +15,7 @@ public class SnakeController : MonoBehaviour
     private Vector2Int nextDirection = Vector2Int.right;
     private float moveTimer = 0f;
     private bool isGameOver = false;
+    private bool gameStarted = false;
     private Sprite squareSprite;
 
     private void Start()
@@ -22,6 +23,9 @@ public class SnakeController : MonoBehaviour
         // Создаем спрайт для сегментов змейки
         squareSprite = CreateSquareSprite();
         InitializeSnake();
+        
+        Debug.Log("=== Snake Game Started ===");
+        Debug.Log($"Use Arrow Keys or WASD to move the snake!");
     }
 
     private Sprite CreateSquareSprite()
@@ -53,8 +57,10 @@ public class SnakeController : MonoBehaviour
 
         direction = Vector2Int.right;
         nextDirection = Vector2Int.right;
+        gameStarted = false;
         
-        Debug.Log($"Snake initialized at position ({startX}, {startY})");
+        Debug.Log($"Snake initialized at position ({startX}, {startY}) with {snakeBody.Count} segments");
+        Debug.Log($"Snake body: Head at ({snakeBody[0].x}, {snakeBody[0].y}), Tail at ({snakeBody[snakeBody.Count-1].x}, {snakeBody[snakeBody.Count-1].y})");
     }
 
     private void CreateSnakeSegment(Vector2Int gridPos, bool isHead)
@@ -98,64 +104,141 @@ public class SnakeController : MonoBehaviour
 
     private void HandleInput()
     {
+        bool inputReceived = false;
+        
         // Управление стрелками
-        if (Input.GetKeyDown(KeyCode.UpArrow) && direction != Vector2Int.down)
+        if (Input.GetKeyDown(KeyCode.UpArrow))
         {
-            nextDirection = Vector2Int.up;
+            if (direction != Vector2Int.down)
+            {
+                nextDirection = Vector2Int.up;
+                inputReceived = true;
+                gameStarted = true;
+            }
         }
-        else if (Input.GetKeyDown(KeyCode.DownArrow) && direction != Vector2Int.up)
+        else if (Input.GetKeyDown(KeyCode.DownArrow))
         {
-            nextDirection = Vector2Int.down;
+            if (direction != Vector2Int.up)
+            {
+                nextDirection = Vector2Int.down;
+                inputReceived = true;
+                gameStarted = true;
+            }
         }
-        else if (Input.GetKeyDown(KeyCode.LeftArrow) && direction != Vector2Int.right)
+        else if (Input.GetKeyDown(KeyCode.LeftArrow))
         {
-            nextDirection = Vector2Int.left;
+            if (direction != Vector2Int.right)
+            {
+                nextDirection = Vector2Int.left;
+                inputReceived = true;
+                gameStarted = true;
+            }
         }
-        else if (Input.GetKeyDown(KeyCode.RightArrow) && direction != Vector2Int.left)
+        else if (Input.GetKeyDown(KeyCode.RightArrow))
         {
-            nextDirection = Vector2Int.right;
+            if (direction != Vector2Int.left)
+            {
+                nextDirection = Vector2Int.right;
+                inputReceived = true;
+                gameStarted = true;
+            }
         }
 
         // Дополнительное управление WASD
-        if (Input.GetKeyDown(KeyCode.W) && direction != Vector2Int.down)
+        if (Input.GetKeyDown(KeyCode.W))
         {
-            nextDirection = Vector2Int.up;
+            if (direction != Vector2Int.down)
+            {
+                nextDirection = Vector2Int.up;
+                inputReceived = true;
+                gameStarted = true;
+            }
         }
-        else if (Input.GetKeyDown(KeyCode.S) && direction != Vector2Int.up)
+        else if (Input.GetKeyDown(KeyCode.S))
         {
-            nextDirection = Vector2Int.down;
+            if (direction != Vector2Int.up)
+            {
+                nextDirection = Vector2Int.down;
+                inputReceived = true;
+                gameStarted = true;
+            }
         }
-        else if (Input.GetKeyDown(KeyCode.A) && direction != Vector2Int.right)
+        else if (Input.GetKeyDown(KeyCode.A))
         {
-            nextDirection = Vector2Int.left;
+            if (direction != Vector2Int.right)
+            {
+                nextDirection = Vector2Int.left;
+                inputReceived = true;
+                gameStarted = true;
+            }
         }
-        else if (Input.GetKeyDown(KeyCode.D) && direction != Vector2Int.left)
+        else if (Input.GetKeyDown(KeyCode.D))
         {
-            nextDirection = Vector2Int.right;
+            if (direction != Vector2Int.left)
+            {
+                nextDirection = Vector2Int.right;
+                inputReceived = true;
+                gameStarted = true;
+            }
+        }
+        
+        if (inputReceived)
+        {
+            Debug.Log($"Input received: Moving {nextDirection}");
         }
     }
 
     private void Move()
     {
+        // Не двигаемся пока игрок не нажал кнопку
+        if (!gameStarted) return;
+        
         direction = nextDirection;
 
         // Вычисляем новую позицию головы
         Vector2Int newHead = snakeBody[0] + direction;
 
+        Debug.Log($"Moving to ({newHead.x}, {newHead.y}), Direction: {direction}");
+
         // Проверка столкновения с краями
         if (!GameManager.Instance.IsValidPosition(newHead.x, newHead.y))
         {
-            Debug.Log($"Game Over: Hit wall at ({newHead.x}, {newHead.y})");
+            Debug.Log($"<color=red>Game Over: Hit wall at ({newHead.x}, {newHead.y})</color>");
             GameOver();
             return;
         }
 
         // Проверка столкновения с собственным телом
-        if (snakeBody.Contains(newHead))
+        // ВАЖНО: Не проверяем последний элемент (хвост), так как он удалится при движении
+        // Проверяем только если не съедим еду
+        FoodSpawner foodSpawner = FindObjectOfType<FoodSpawner>();
+        bool willEatFood = foodSpawner != null && foodSpawner.IsFoodAtPosition(newHead);
+        
+        if (!willEatFood)
         {
-            Debug.Log($"Game Over: Hit self at ({newHead.x}, {newHead.y})");
-            GameOver();
-            return;
+            // Если не едим еду, хвост удалится, поэтому проверяем столкновение без хвоста
+            for (int i = 0; i < snakeBody.Count - 1; i++)
+            {
+                if (snakeBody[i] == newHead)
+                {
+                    Debug.Log($"<color=red>Game Over: Hit self at ({newHead.x}, {newHead.y})</color>");
+                    GameOver();
+                    return;
+                }
+            }
+        }
+        else
+        {
+            // Если едим еду, хвост НЕ удалится, проверяем всё тело
+            for (int i = 0; i < snakeBody.Count; i++)
+            {
+                if (snakeBody[i] == newHead)
+                {
+                    Debug.Log($"<color=red>Game Over: Hit self at ({newHead.x}, {newHead.y})</color>");
+                    GameOver();
+                    return;
+                }
+            }
         }
 
         // Добавляем новую голову
@@ -163,13 +246,12 @@ public class SnakeController : MonoBehaviour
         CreateSnakeSegment(newHead, true);
 
         // Проверяем, не съели ли мы еду
-        FoodSpawner foodSpawner = FindObjectOfType<FoodSpawner>();
-        if (foodSpawner != null && foodSpawner.IsFoodAtPosition(newHead))
+        if (willEatFood)
         {
             // Съели еду - не удаляем хвост
             foodSpawner.OnFoodEaten();
             GameManager.Instance.AddScore(1);
-            Debug.Log($"Food eaten! Score: {GameManager.Instance.GetScore()}");
+            Debug.Log($"<color=green>Food eaten! Score: {GameManager.Instance.GetScore()}, Length: {snakeBody.Count}</color>");
         }
         else
         {
@@ -203,6 +285,7 @@ public class SnakeController : MonoBehaviour
             if (sr != null)
             {
                 sr.color = i == 0 ? GameManager.Instance.snakeHeadColor : GameManager.Instance.snakeBodyColor;
+                snakeSegments[i].name = i == 0 ? "SnakeHead" : $"SnakeBody_{i}";
             }
         }
     }
@@ -210,6 +293,7 @@ public class SnakeController : MonoBehaviour
     private void GameOver()
     {
         isGameOver = true;
+        Debug.Log("<color=red>=== GAME OVER ===</color>");
         GameManager.Instance.GameOver();
     }
 
