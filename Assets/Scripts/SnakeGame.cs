@@ -79,6 +79,18 @@ public class SnakeGame : MonoBehaviour
     // Level-up modal
     private GameObject levelUpCanvasGO;
 
+    // Animation
+    [Header("Animation")]
+    [SerializeField, Tooltip("Food pulsation speed (cycles/sec)")] private float foodPulseSpeed = 1.6f;
+    [SerializeField, Tooltip("Food pulsation amplitude (scale add)")] private float foodPulseAmplitude = 0.12f;
+    [SerializeField, Tooltip("Snake pulse amplitude on eat")] private float snakePulseAmplitude = 0.18f;
+    [SerializeField, Tooltip("Duration of one segment pulse (sec)")] private float snakePulseDuration = 0.2f;
+    [SerializeField, Tooltip("Delay between segment pulses (sec)")] private float snakePulseDelayPerSegment = 0.05f;
+    [SerializeField, Tooltip("Max stacked pulse amplitude")] private float snakePulseMaxStack = 0.35f;
+
+    private List<float> snakePulseWaveStartTimes;
+    private List<float> foodPulsePhaseOffsets;
+
     [Header("Audio")]
     [SerializeField, Tooltip("Enable/disable all game sounds")] private bool enableSound = true;
     [SerializeField, Range(0f, 1f), Tooltip("Master volume for SFX")] private float sfxVolume = 0.8f;
@@ -116,12 +128,16 @@ public class SnakeGame : MonoBehaviour
             return;
         }
 
-        moveTimer += Time.deltaTime;
+        float dt = Time.deltaTime;
+        moveTimer += dt;
         if (moveTimer >= moveIntervalSeconds)
         {
             moveTimer -= moveIntervalSeconds;
             StepGame();
         }
+        // Continuous visual updates (pulsations)
+        UpdateFoodPulse(Time.time);
+        UpdateSnakePulse(Time.time);
     }
 
     private void SetupCamera()
@@ -189,6 +205,8 @@ public class SnakeGame : MonoBehaviour
         moveIntervalSeconds = defaultMoveIntervalSeconds;
         foodNeedsSprite = false;
         pendingLevelUps = 0;
+        snakePulseWaveStartTimes = new List<float>();
+        foodPulsePhaseOffsets = new List<float>();
 
         // Reset progression
         playerLevel = 1;
@@ -387,6 +405,14 @@ public class SnakeGame : MonoBehaviour
                 EnsureFoodObjectForIndex(foodCells.Count - 1);
                 // Randomize sprite each time we spawn a food
                 SetFoodSpriteForIndex(foodCells.Count - 1);
+                // Assign a random phase so foods are out of sync
+                if (foodPulsePhaseOffsets != null)
+                {
+                    while (foodPulsePhaseOffsets.Count < foodCells.Count)
+                    {
+                        foodPulsePhaseOffsets.Add(Random.Range(0f, Mathf.PI * 2f));
+                    }
+                }
                 RenderFood();
                 return;
             }
@@ -403,6 +429,13 @@ public class SnakeGame : MonoBehaviour
                     foodCells.Add(p);
                     EnsureFoodObjectForIndex(foodCells.Count - 1);
                     SetFoodSpriteForIndex(foodCells.Count - 1);
+                    if (foodPulsePhaseOffsets != null)
+                    {
+                        while (foodPulsePhaseOffsets.Count < foodCells.Count)
+                        {
+                            foodPulsePhaseOffsets.Add(Random.Range(0f, Mathf.PI * 2f));
+                        }
+                    }
                     RenderFood();
                     return;
                 }
@@ -575,6 +608,7 @@ public class SnakeGame : MonoBehaviour
             go.transform.position = new Vector3(cell.x, cell.y, 0f);
             var sr = go.GetComponent<SpriteRenderer>();
             sr.sprite = snakeSprite;
+            // Base color; per-frame scale via UpdateSnakePulse
             sr.color = Color.white;
             // Handle arrow rotation per segment
             if (index < segmentArrowTransforms.Count)
@@ -602,7 +636,7 @@ public class SnakeGame : MonoBehaviour
             prevCell = cell;
             index++;
         }
-        // Disable any extras
+        // Disable any extras (and keep arrow lists aligned)
         for (int i = index; i < segmentObjects.Count; i++)
         {
             segmentObjects[i].SetActive(false);
@@ -626,6 +660,14 @@ public class SnakeGame : MonoBehaviour
             srA.color = new Color(0.95f, 0.98f, 1f, 0.92f);
             srA.sortingOrder = 1;
             segmentArrowTransforms.Add(arrow.transform);
+            // Ensure pulse buffers align to segment count
+            if (snakePulseWaveStartTimes != null)
+            {
+                while (snakePulseWaveStartTimes.Count < segmentObjects.Count)
+                {
+                    snakePulseWaveStartTimes.Add(-9999f);
+                }
+            }
         }
     }
 
@@ -649,6 +691,8 @@ public class SnakeGame : MonoBehaviour
             {
                 var pos = foodCells[i];
                 obj.transform.position = new Vector3(pos.x, pos.y, 0f);
+                // Base scale reset; animated every Update
+                obj.transform.localScale = Vector3.one;
             }
         }
     }
@@ -659,6 +703,55 @@ public class SnakeGame : MonoBehaviour
         if (foodObjects == null) foodObjects = new List<GameObject>();
     }
 
+    private void UpdateSnakePulse(float timeNow)
+    {
+        if (segmentObjects == null || segmentObjects.Count == 0) return;
+        if (snakePulseWaveStartTimes == null || snakePulseWaveStartTimes.Count == 0) return;
+        // Ensure buffer length
+        while (snakePulseWaveStartTimes.Count < segmentObjects.Count)
+        {
+            snakePulseWaveStartTimes.Add(-9999f);
+        }
+        for (int i = 0; i < segmentObjects.Count; i++)
+        {
+            var seg = segmentObjects[i];
+            if (seg == null || !seg.activeSelf) continue;
+            float baseScale = 1f;
+            float scale = baseScale;
+            // Sum contributions from all active waves; each wave starts at head with per-segment delay
+            // We store multiple wave start times by pushing new entries; reuse same list, interpret as wave origins
+            // To support multiple overlapping waves, we keep a small ring by clamping size (optional)
+            for (int w = 0; w < snakePulseWaveStartTimes.Count; w++)
+            {
+                float t0 = snakePulseWaveStartTimes[w];
+                if (t0 <= -9000f) continue;
+                float localT = timeNow - t0 - (i * snakePulseDelayPerSegment);
+                if (localT >= 0f && localT <= snakePulseDuration)
+                {
+                    // Simple ease: sin pulse 0..pi over duration
+                    float phase = Mathf.PI * (localT / snakePulseDuration);
+                    scale += Mathf.Sin(phase) * snakePulseAmplitude;
+                }
+            }
+            // Cap extreme stacking
+            scale = Mathf.Min(baseScale + snakePulseMaxStack, scale);
+            seg.transform.localScale = new Vector3(scale, scale, 1f);
+        }
+    }
+
+    private void StartSnakePulseWave(float timeNow)
+    {
+        if (snakePulseWaveStartTimes == null) snakePulseWaveStartTimes = new List<float>();
+        // Push new wave timestamp; keep only last few to avoid unbounded growth
+        snakePulseWaveStartTimes.Add(timeNow);
+        int maxWaves = 8;
+        if (snakePulseWaveStartTimes.Count > maxWaves)
+        {
+            int remove = snakePulseWaveStartTimes.Count - maxWaves;
+            snakePulseWaveStartTimes.RemoveRange(0, remove);
+        }
+    }
+
     private void EnsureFoodObjectForIndex(int index)
     {
         if (renderContainer == null) EnsureRuntimeAssets();
@@ -666,6 +759,20 @@ public class SnakeGame : MonoBehaviour
         {
             var go = CreateCellGO("Food", Color.white, cellSprite);
             foodObjects.Add(go);
+        }
+    }
+
+    private void UpdateFoodPulse(float timeNow)
+    {
+        if (foodObjects == null || foodObjects.Count == 0) return;
+        float twoPi = Mathf.PI * 2f;
+        for (int i = 0; i < foodObjects.Count; i++)
+        {
+            var obj = foodObjects[i];
+            if (obj == null || !obj.activeSelf) continue;
+            float phase = (foodPulsePhaseOffsets != null && i < foodPulsePhaseOffsets.Count) ? foodPulsePhaseOffsets[i] : 0f;
+            float s = 1f + Mathf.Sin((timeNow * twoPi * foodPulseSpeed) + phase) * foodPulseAmplitude;
+            obj.transform.localScale = new Vector3(s, s, 1f);
         }
     }
 
@@ -707,6 +814,7 @@ public class SnakeGame : MonoBehaviour
             foodObjects.Clear();
         }
         if (foodCells != null) foodCells.Clear();
+        if (foodPulsePhaseOffsets != null) foodPulsePhaseOffsets.Clear();
     }
 
     private GameObject CreateCellGO(string baseName, Color tint, Sprite sprite)
@@ -801,9 +909,15 @@ public class SnakeGame : MonoBehaviour
                 if (obj != null) Destroy(obj);
                 foodObjects.RemoveAt(eatenIndex);
             }
+            if (foodPulsePhaseOffsets != null && eatenIndex < foodPulsePhaseOffsets.Count)
+            {
+                foodPulsePhaseOffsets.RemoveAt(eatenIndex);
+            }
         }
         AddXp(xpPerFood);
         EnsureFoodCount();
+        // Launch snake pulse wave from head
+        StartSnakePulseWave(Time.time);
     }
 
     private void EnsureHudExists()
