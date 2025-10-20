@@ -11,11 +11,6 @@ public class GameManager : MonoBehaviour
     public int gridHeight = 16;
     public float cellSize = 1f;
 
-    [Header("Prefabs")]
-    public GameObject snakeSegmentPrefab;
-    public GameObject foodPrefab;
-    public GameObject gridCellPrefab;
-
     [Header("UI")]
     public TextMeshProUGUI scoreText;
     public GameObject gameOverPanel;
@@ -28,7 +23,7 @@ public class GameManager : MonoBehaviour
     public Color foodColor = new Color(1f, 0.28f, 0.34f, 1f);
 
     private int score = 0;
-    private GameObject[,] gridCells;
+    private GameObject gridParent;
 
     private void Awake()
     {
@@ -54,10 +49,8 @@ public class GameManager : MonoBehaviour
 
     private void CreateGrid()
     {
-        gridCells = new GameObject[gridWidth, gridHeight];
-
         // Создаем родительский объект для сетки
-        GameObject gridParent = new GameObject("Grid");
+        gridParent = new GameObject("Grid");
         gridParent.transform.position = Vector3.zero;
 
         for (int x = 0; x < gridWidth; x++)
@@ -65,43 +58,35 @@ public class GameManager : MonoBehaviour
             for (int y = 0; y < gridHeight; y++)
             {
                 Vector3 position = GetWorldPosition(x, y);
-                GameObject cell = null;
-
-                if (gridCellPrefab != null)
-                {
-                    cell = Instantiate(gridCellPrefab, position, Quaternion.identity, gridParent.transform);
-                }
-                else
-                {
-                    // Создаем простую клетку, если префаб не назначен
-                    cell = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    cell.transform.position = position;
-                    cell.transform.localScale = new Vector3(cellSize * 0.98f, cellSize * 0.98f, 1f);
-                    
-                    SpriteRenderer sr = cell.GetComponent<SpriteRenderer>();
-                    if (sr != null)
-                    {
-                        sr.color = gridColor;
-                        sr.sortingOrder = -10;
-                    }
-                    else
-                    {
-                        Renderer renderer = cell.GetComponent<Renderer>();
-                        if (renderer != null)
-                        {
-                            renderer.material.color = gridColor;
-                        }
-                    }
-                }
-
-                cell.name = $"Cell_{x}_{y}";
+                
+                // Создаем GameObject для клетки
+                GameObject cell = new GameObject($"Cell_{x}_{y}");
+                cell.transform.position = position;
                 cell.transform.parent = gridParent.transform;
-                gridCells[x, y] = cell;
+                
+                // Добавляем SpriteRenderer
+                SpriteRenderer sr = cell.AddComponent<SpriteRenderer>();
+                sr.sprite = CreateSquareSprite();
+                sr.color = gridColor;
+                sr.sortingOrder = -10;
+                
+                // Устанавливаем размер клетки
+                cell.transform.localScale = new Vector3(cellSize * 0.95f, cellSize * 0.95f, 1f);
             }
         }
 
         // Центрируем камеру
         CenterCamera();
+    }
+
+    private Sprite CreateSquareSprite()
+    {
+        // Создаем простой квадратный спрайт
+        Texture2D texture = new Texture2D(1, 1);
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply();
+        
+        return Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
     }
 
     private void CenterCamera()
@@ -113,9 +98,10 @@ public class GameManager : MonoBehaviour
             float centerY = (gridHeight - 1) * cellSize / 2f;
             mainCamera.transform.position = new Vector3(centerX, centerY, -10f);
 
-            // Настраиваем размер камеры
-            float verticalSize = gridHeight * cellSize / 2f + 1f;
-            mainCamera.orthographicSize = verticalSize;
+            // Настраиваем размер камеры, добавляем небольшой отступ
+            float verticalSize = (gridHeight * cellSize) / 2f + 1f;
+            float horizontalSize = (gridWidth * cellSize) / 2f / mainCamera.aspect + 1f;
+            mainCamera.orthographicSize = Mathf.Max(verticalSize, horizontalSize);
         }
     }
 

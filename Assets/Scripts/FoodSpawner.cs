@@ -5,11 +5,45 @@ public class FoodSpawner : MonoBehaviour
     private Vector2Int currentFoodPosition;
     private GameObject currentFoodObject;
     private SnakeController snakeController;
+    private Sprite circleSprite;
 
     private void Start()
     {
         snakeController = FindObjectOfType<SnakeController>();
-        SpawnFood();
+        circleSprite = CreateCircleSprite();
+        
+        // Небольшая задержка перед созданием первой еды
+        Invoke("SpawnFood", 0.1f);
+    }
+
+    private Sprite CreateCircleSprite()
+    {
+        // Создаем круглый спрайт
+        int resolution = 32;
+        Texture2D texture = new Texture2D(resolution, resolution);
+        
+        Vector2 center = new Vector2(resolution / 2f, resolution / 2f);
+        float radius = resolution / 2f;
+        
+        for (int x = 0; x < resolution; x++)
+        {
+            for (int y = 0; y < resolution; y++)
+            {
+                float distance = Vector2.Distance(new Vector2(x, y), center);
+                if (distance <= radius)
+                {
+                    texture.SetPixel(x, y, Color.white);
+                }
+                else
+                {
+                    texture.SetPixel(x, y, Color.clear);
+                }
+            }
+        }
+        
+        texture.Apply();
+        
+        return Sprite.Create(texture, new Rect(0, 0, resolution, resolution), new Vector2(0.5f, 0.5f), resolution);
     }
 
     private void SpawnFood()
@@ -38,52 +72,31 @@ public class FoodSpawner : MonoBehaviour
 
         currentFoodPosition = newPosition;
         CreateFoodObject(newPosition);
+        
+        Debug.Log($"Food spawned at ({newPosition.x}, {newPosition.y})");
     }
 
     private void CreateFoodObject(Vector2Int gridPos)
     {
         Vector3 worldPos = GameManager.Instance.GetWorldPosition(gridPos.x, gridPos.y);
 
-        if (GameManager.Instance.foodPrefab != null)
-        {
-            currentFoodObject = Instantiate(GameManager.Instance.foodPrefab, worldPos, Quaternion.identity);
-        }
-        else
-        {
-            // Создаем простую сферу, если префаб не назначен
-            currentFoodObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            currentFoodObject.transform.position = worldPos;
-            currentFoodObject.transform.localScale = new Vector3(
-                GameManager.Instance.cellSize * 0.7f,
-                GameManager.Instance.cellSize * 0.7f,
-                GameManager.Instance.cellSize * 0.7f
-            );
-
-            // Удаляем коллайдер, он нам не нужен
-            Collider collider = currentFoodObject.GetComponent<Collider>();
-            if (collider != null)
-            {
-                Destroy(collider);
-            }
-
-            SpriteRenderer sr = currentFoodObject.GetComponent<SpriteRenderer>();
-            if (sr != null)
-            {
-                sr.color = GameManager.Instance.foodColor;
-                sr.sortingOrder = 2;
-            }
-            else
-            {
-                Renderer renderer = currentFoodObject.GetComponent<Renderer>();
-                if (renderer != null)
-                {
-                    renderer.material.color = GameManager.Instance.foodColor;
-                }
-            }
-        }
-
-        currentFoodObject.name = "Food";
+        // Создаем GameObject для еды
+        currentFoodObject = new GameObject("Food");
+        currentFoodObject.transform.position = worldPos;
         currentFoodObject.transform.parent = transform;
+        
+        // Добавляем SpriteRenderer
+        SpriteRenderer sr = currentFoodObject.AddComponent<SpriteRenderer>();
+        sr.sprite = circleSprite;
+        sr.color = GameManager.Instance.foodColor;
+        sr.sortingOrder = 2;
+        
+        // Устанавливаем размер еды (немного меньше клетки)
+        currentFoodObject.transform.localScale = new Vector3(
+            GameManager.Instance.cellSize * 0.7f,
+            GameManager.Instance.cellSize * 0.7f,
+            1f
+        );
     }
 
     public bool IsFoodAtPosition(Vector2Int position)

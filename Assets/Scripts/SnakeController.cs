@@ -15,10 +15,23 @@ public class SnakeController : MonoBehaviour
     private Vector2Int nextDirection = Vector2Int.right;
     private float moveTimer = 0f;
     private bool isGameOver = false;
+    private Sprite squareSprite;
 
     private void Start()
     {
+        // Создаем спрайт для сегментов змейки
+        squareSprite = CreateSquareSprite();
         InitializeSnake();
+    }
+
+    private Sprite CreateSquareSprite()
+    {
+        // Создаем простой квадратный спрайт
+        Texture2D texture = new Texture2D(1, 1);
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply();
+        
+        return Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
     }
 
     private void InitializeSnake()
@@ -27,10 +40,10 @@ public class SnakeController : MonoBehaviour
         snakeSegments.Clear();
 
         // Начальная позиция змейки в центре поля
-        int startX = GameManager.Instance.gridWidth / 2 - 1;
+        int startX = GameManager.Instance.gridWidth / 2;
         int startY = GameManager.Instance.gridHeight / 2;
 
-        // Создаем змейку длиной 2 клетки
+        // Создаем змейку длиной 2 клетки, движущуюся вправо
         for (int i = 0; i < initialLength; i++)
         {
             Vector2Int pos = new Vector2Int(startX - i, startY);
@@ -40,46 +53,32 @@ public class SnakeController : MonoBehaviour
 
         direction = Vector2Int.right;
         nextDirection = Vector2Int.right;
+        
+        Debug.Log($"Snake initialized at position ({startX}, {startY})");
     }
 
     private void CreateSnakeSegment(Vector2Int gridPos, bool isHead)
     {
-        GameObject segment;
         Vector3 worldPos = GameManager.Instance.GetWorldPosition(gridPos.x, gridPos.y);
 
-        if (GameManager.Instance.snakeSegmentPrefab != null)
-        {
-            segment = Instantiate(GameManager.Instance.snakeSegmentPrefab, worldPos, Quaternion.identity);
-        }
-        else
-        {
-            // Создаем простой квадрат, если префаб не назначен
-            segment = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            segment.transform.position = worldPos;
-            segment.transform.localScale = new Vector3(
-                GameManager.Instance.cellSize * 0.9f,
-                GameManager.Instance.cellSize * 0.9f,
-                1f
-            );
-
-            SpriteRenderer sr = segment.GetComponent<SpriteRenderer>();
-            if (sr != null)
-            {
-                sr.color = isHead ? GameManager.Instance.snakeHeadColor : GameManager.Instance.snakeBodyColor;
-                sr.sortingOrder = 1;
-            }
-            else
-            {
-                Renderer renderer = segment.GetComponent<Renderer>();
-                if (renderer != null)
-                {
-                    renderer.material.color = isHead ? GameManager.Instance.snakeHeadColor : GameManager.Instance.snakeBodyColor;
-                }
-            }
-        }
-
-        segment.name = isHead ? "SnakeHead" : "SnakeBody";
+        // Создаем GameObject для сегмента змейки
+        GameObject segment = new GameObject(isHead ? "SnakeHead" : "SnakeBody");
+        segment.transform.position = worldPos;
         segment.transform.parent = transform;
+        
+        // Добавляем SpriteRenderer
+        SpriteRenderer sr = segment.AddComponent<SpriteRenderer>();
+        sr.sprite = squareSprite;
+        sr.color = isHead ? GameManager.Instance.snakeHeadColor : GameManager.Instance.snakeBodyColor;
+        sr.sortingOrder = 1;
+        
+        // Устанавливаем размер сегмента
+        segment.transform.localScale = new Vector3(
+            GameManager.Instance.cellSize * 0.9f,
+            GameManager.Instance.cellSize * 0.9f,
+            1f
+        );
+
         snakeSegments.Add(segment);
     }
 
@@ -146,6 +145,7 @@ public class SnakeController : MonoBehaviour
         // Проверка столкновения с краями
         if (!GameManager.Instance.IsValidPosition(newHead.x, newHead.y))
         {
+            Debug.Log($"Game Over: Hit wall at ({newHead.x}, {newHead.y})");
             GameOver();
             return;
         }
@@ -153,6 +153,7 @@ public class SnakeController : MonoBehaviour
         // Проверка столкновения с собственным телом
         if (snakeBody.Contains(newHead))
         {
+            Debug.Log($"Game Over: Hit self at ({newHead.x}, {newHead.y})");
             GameOver();
             return;
         }
@@ -168,6 +169,7 @@ public class SnakeController : MonoBehaviour
             // Съели еду - не удаляем хвост
             foodSpawner.OnFoodEaten();
             GameManager.Instance.AddScore(1);
+            Debug.Log($"Food eaten! Score: {GameManager.Instance.GetScore()}");
         }
         else
         {
@@ -201,14 +203,6 @@ public class SnakeController : MonoBehaviour
             if (sr != null)
             {
                 sr.color = i == 0 ? GameManager.Instance.snakeHeadColor : GameManager.Instance.snakeBodyColor;
-            }
-            else
-            {
-                Renderer renderer = snakeSegments[i].GetComponent<Renderer>();
-                if (renderer != null)
-                {
-                    renderer.material.color = i == 0 ? GameManager.Instance.snakeHeadColor : GameManager.Instance.snakeBodyColor;
-                }
             }
         }
     }
