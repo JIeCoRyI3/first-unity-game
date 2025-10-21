@@ -52,6 +52,11 @@ public class SnakeGame : MonoBehaviour
     private Vector2Int currentDirection; // unit vector: up/down/left/right
     private Vector2Int nextDirection;
 
+    [Header("Input")]
+    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 4;
+    // Oldest-first buffer; enables rapid alternation ("staircase") without losing inputs
+    private readonly List<Vector2Int> bufferedDirections = new List<Vector2Int>(8);
+
     private Vector2Int foodCell;
     private bool isAlive;
     private bool isPaused;
@@ -202,7 +207,8 @@ public class SnakeGame : MonoBehaviour
         UpdateEnemyFoodAttraction(dt);
 
         moveTimer += dt;
-        if (moveTimer >= moveIntervalSeconds)
+        // Process all due steps to avoid dropped moves on slow frames
+        while (moveTimer >= moveIntervalSeconds)
         {
             moveTimer -= moveIntervalSeconds;
             StepGame();
@@ -378,6 +384,7 @@ public class SnakeGame : MonoBehaviour
         pendingLevelUps = 0;
         snakePulseWaveStartTimes = new List<float>();
         foodPulsePhaseOffsets = new List<float>();
+        bufferedDirections.Clear();
 
         // Reset timers & enemy engagement state
         totalPlayTimeSeconds = 0f;
@@ -435,41 +442,41 @@ public class SnakeGame : MonoBehaviour
         {
             if (kb.upArrowKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame)
             {
-                TrySetNextDirection(Vector2Int.up);
+                QueueDirectionInput(Vector2Int.up);
                 return;
             }
             if (kb.downArrowKey.wasPressedThisFrame || kb.sKey.wasPressedThisFrame)
             {
-                TrySetNextDirection(Vector2Int.down);
+                QueueDirectionInput(Vector2Int.down);
                 return;
             }
             if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame)
             {
-                TrySetNextDirection(Vector2Int.left);
+                QueueDirectionInput(Vector2Int.left);
                 return;
             }
             if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame)
             {
-                TrySetNextDirection(Vector2Int.right);
+                QueueDirectionInput(Vector2Int.right);
                 return;
             }
         }
 #else
         if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
         {
-            TrySetNextDirection(Vector2Int.up);
+            QueueDirectionInput(Vector2Int.up);
         }
         else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
         {
-            TrySetNextDirection(Vector2Int.down);
+            QueueDirectionInput(Vector2Int.down);
         }
         else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
         {
-            TrySetNextDirection(Vector2Int.left);
+            QueueDirectionInput(Vector2Int.left);
         }
         else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
-            TrySetNextDirection(Vector2Int.right);
+            QueueDirectionInput(Vector2Int.right);
         }
 #endif
     }
@@ -484,19 +491,31 @@ public class SnakeGame : MonoBehaviour
 #endif
     }
 
-    private void TrySetNextDirection(Vector2Int desired)
+    private void QueueDirectionInput(Vector2Int desired)
     {
-        // Prevent reversing into yourself (180° turn) based on current direction
-        if (desired + currentDirection == Vector2Int.zero)
+        // Determine baseline: last enqueued direction (if any) or the current movement direction
+        Vector2Int baseline = bufferedDirections.Count > 0 ? bufferedDirections[bufferedDirections.Count - 1] : currentDirection;
+        // Block immediate 180° reversals relative to baseline to avoid self-collisions
+        if (desired + baseline == Vector2Int.zero) return;
+        // Avoid redundant duplicate entries
+        if (bufferedDirections.Count > 0 && bufferedDirections[bufferedDirections.Count - 1] == desired) return;
+
+        // Keep buffer small and responsive: prefer most recent intents
+        if (bufferedDirections.Count >= Mathf.Max(1, maxBufferedDirections))
         {
-            return;
+            // Drop the oldest to retain the latest inputs for responsiveness
+            bufferedDirections.RemoveAt(0);
         }
+        bufferedDirections.Add(desired);
+
+        // Update preview direction immediately so head orientation reflects latest intent
         nextDirection = desired;
     }
 
     private void StepGame()
     {
-        // Apply buffered direction exactly on tick
+        // Apply at most one queued direction exactly on this tick (oldest first)
+        ApplyQueuedDirectionForThisStep();
         bool turnedThisStep = currentDirection != nextDirection;
         currentDirection = nextDirection;
 
@@ -594,6 +613,28 @@ public class SnakeGame : MonoBehaviour
         }
 
         RenderWorld(fullRebuild: false);
+    }
+
+    // Consume one buffered direction (if any) for this tick.
+    // This enables tight double-turns across consecutive ticks and preserves player intent.
+    private void ApplyQueuedDirectionForThisStep()
+    {
+        if (bufferedDirections.Count == 0)
+        {
+            return;
+        }
+
+        // Consume oldest desired direction
+        var desired = bufferedDirections[0];
+        bufferedDirections.RemoveAt(0);
+
+        // Ensure no 180° reversal relative to current direction (runtime safety)
+        if (desired + currentDirection == Vector2Int.zero)
+        {
+            return;
+        }
+
+        nextDirection = desired;
     }
 
     private void SpawnFood()
