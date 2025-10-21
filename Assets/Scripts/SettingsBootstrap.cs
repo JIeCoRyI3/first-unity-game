@@ -19,7 +19,7 @@ public static class SettingsBootstrap
     private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         EnsureSettingsManager();
-        if (scene.name == "Настройки")
+        if (scene.name == "Settings")
         {
             if (Object.FindObjectOfType<SettingsController>() == null)
             {
