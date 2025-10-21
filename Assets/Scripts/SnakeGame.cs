@@ -54,7 +54,7 @@ public class SnakeGame : MonoBehaviour
     private GameObject borderRight;
     private readonly List<GameObject> backgroundTiles = new List<GameObject>();
     private readonly List<GameObject> segmentObjects = new List<GameObject>();
-    private readonly List<Transform> segmentArrowTransforms = new List<Transform>();
+    private readonly List<SpriteRenderer> segmentSpriteRenderers = new List<SpriteRenderer>();
     // Food rendering (now supports multiple food items)
     private GameObject foodObject; // legacy (unused in multi-food mode)
     private List<Vector2Int> foodCells;
@@ -62,7 +62,8 @@ public class SnakeGame : MonoBehaviour
     private int maxFoodCount = 1;
     private Sprite cellSprite;
     private Sprite snakeSprite;
-    private Sprite arrowSprite;
+    private Sprite[] bodyFrames;
+    private Sprite[] headFrames;
     private Sprite[] foodSprites;
     private bool foodNeedsSprite;
     private GameObject gameOverCanvasGO;
@@ -97,6 +98,13 @@ public class SnakeGame : MonoBehaviour
 
     private List<float> snakePulseWaveStartTimes;
     private List<float> foodPulsePhaseOffsets;
+
+    // Sprite animation
+    [Header("Sprite Animation")]
+    [SerializeField, Tooltip("Frames per second for snake sprite animations")] private float animationFps = 8f;
+    private float animationTimer;
+    private int headFrameIndex;
+    private int bodyFrameIndex;
 
     [Header("Audio")]
     [SerializeField, Tooltip("Enable/disable all game sounds")] private bool enableSound = true;
@@ -145,6 +153,9 @@ public class SnakeGame : MonoBehaviour
         // Continuous visual updates (pulsations)
         UpdateFoodPulse(Time.time);
         UpdateSnakePulse(Time.time);
+        
+        // Sprite animation
+        UpdateSpriteAnimations(dt);
     }
 
     private void SetupCamera()
@@ -177,6 +188,9 @@ public class SnakeGame : MonoBehaviour
             renderContainer = containerGO.transform;
         }
 
+        // Load sprite sheets from Resources (if present)
+        LoadSnakeSpriteSheets();
+
         if (cellSprite == null)
         {
             // Create a 1x1 white sprite to be tinted by SpriteRenderer.color
@@ -193,10 +207,6 @@ public class SnakeGame : MonoBehaviour
         {
             snakeSprite = GenerateSnakeSprite();
         }
-        if (arrowSprite == null)
-        {
-            arrowSprite = GenerateArrowSprite();
-        }
         if (foodSprites == null || foodSprites.Length != 5)
         {
             foodSprites = GenerateFoodSprites();
@@ -204,6 +214,47 @@ public class SnakeGame : MonoBehaviour
 
         BuildBackgroundGrid();
         BuildBorders();
+    }
+
+    private void LoadSnakeSpriteSheets()
+    {
+        // Prefer slicing ourselves by grid to ensure correct 6x6 (body) and 2x2 (head)
+        if (bodyFrames == null)
+        {
+            var bodyTex = Resources.Load<Texture2D>("SnakeSprites/snake-body-spritesheet");
+            if (bodyTex != null)
+            {
+                bodyTex.filterMode = FilterMode.Point;
+                bodyFrames = SliceSpriteSheet(bodyTex, 6, 6);
+            }
+            // Fallback to importer-sliced sprites if runtime slicing failed
+            if (bodyFrames == null || bodyFrames.Length == 0)
+            {
+                bodyFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-body-spritesheet");
+                if (bodyFrames != null && bodyFrames.Length == 0) bodyFrames = null;
+            }
+        }
+
+        if (headFrames == null)
+        {
+            var headTex = Resources.Load<Texture2D>("SnakeSprites/snake-head");
+            if (headTex != null)
+            {
+                headTex.filterMode = FilterMode.Point;
+                headFrames = SliceSpriteSheet(headTex, 2, 2);
+            }
+            if (headFrames == null || headFrames.Length == 0)
+            {
+                headFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-head");
+                if (headFrames != null && headFrames.Length == 0) headFrames = null;
+            }
+        }
+
+        // Fallback single-color sprite if sheets are not present
+        if (snakeSprite == null)
+        {
+            snakeSprite = GenerateSnakeSprite();
+        }
     }
 
     private void StartNewGame()
@@ -618,32 +669,28 @@ public class SnakeGame : MonoBehaviour
             var go = segmentObjects[index];
             go.SetActive(true);
             go.transform.position = new Vector3(cell.x, cell.y, 0f);
-            var sr = go.GetComponent<SpriteRenderer>();
-            sr.sprite = snakeSprite;
+            var sr = segmentSpriteRenderers[index];
+            // Choose head/body sprite frame
+            bool isHead = (index == 0);
+            Sprite desiredSprite = isHead ? GetHeadFrame() : GetBodyFrame();
+            if (desiredSprite == null) desiredSprite = snakeSprite;
+            sr.sprite = desiredSprite;
             // Base color; per-frame scale via UpdateSnakePulse
             sr.color = Color.white;
-            // Handle arrow rotation per segment
-            if (index < segmentArrowTransforms.Count)
+            // Ensure scaling so the sprite fits exactly 1x1 world units
+            ApplySpriteUniformScale(go.transform, desiredSprite);
+
+            // Rotation per segment based on direction
+            Vector2Int dirVec;
+            if (isHead)
             {
-                var arrow = segmentArrowTransforms[index];
-                if (arrow != null)
-                {
-                    Vector2Int dir;
-                    if (index == 0)
-                    {
-                        dir = currentDirection;
-                    }
-                    else
-                    {
-                        dir = prevCell.HasValue ? (prevCell.Value - cell) : Vector2Int.up;
-                    }
-                    float zRot = 0f;
-                    if (dir == Vector2Int.up) zRot = 0f;
-                    else if (dir == Vector2Int.right) zRot = -90f;
-                    else if (dir == Vector2Int.down) zRot = 180f;
-                    else if (dir == Vector2Int.left) zRot = 90f;
-                    arrow.localRotation = Quaternion.Euler(0f, 0f, zRot);
-                }
+                dirVec = currentDirection;
+                go.transform.localRotation = Quaternion.Euler(0f, 0f, GetZRotationForHead(dirVec));
+            }
+            else
+            {
+                dirVec = prevCell.HasValue ? (prevCell.Value - cell) : Vector2Int.up;
+                go.transform.localRotation = Quaternion.Euler(0f, 0f, GetZRotationForBody(dirVec));
             }
             prevCell = cell;
             index++;
@@ -663,15 +710,11 @@ public class SnakeGame : MonoBehaviour
         for (int i = 0; i < countToAdd; i++)
         {
             var go = CreateCellGO("SnakeSegment", Color.white, snakeSprite);
+            var sr = go.GetComponent<SpriteRenderer>();
+            if (sr == null) sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = snakeSprite;
             segmentObjects.Add(go);
-            // Add arrow child to visualize direction
-            var arrow = new GameObject("Arrow");
-            arrow.transform.SetParent(go.transform, false);
-            var srA = arrow.AddComponent<SpriteRenderer>();
-            srA.sprite = arrowSprite;
-            srA.color = new Color(0.95f, 0.98f, 1f, 0.92f);
-            srA.sortingOrder = 1;
-            segmentArrowTransforms.Add(arrow.transform);
+            segmentSpriteRenderers.Add(sr);
         }
     }
 
@@ -773,6 +816,99 @@ public class SnakeGame : MonoBehaviour
             float s = 1f + Mathf.Sin((timeNow * twoPi * foodPulseSpeed) + phase) * foodPulseAmplitude;
             obj.transform.localScale = new Vector3(s, s, 1f);
         }
+    }
+
+    private void UpdateSpriteAnimations(float dt)
+    {
+        if ((headFrames == null || headFrames.Length == 0) && (bodyFrames == null || bodyFrames.Length == 0))
+        {
+            return;
+        }
+        if (animationFps <= 0f) return;
+        animationTimer += dt;
+        float frameDuration = 1f / animationFps;
+        if (animationTimer >= frameDuration)
+        {
+            int steps = Mathf.FloorToInt(animationTimer / frameDuration);
+            animationTimer -= steps * frameDuration;
+            if (headFrames != null && headFrames.Length > 0)
+            {
+                headFrameIndex = (headFrameIndex + steps) % headFrames.Length;
+            }
+            if (bodyFrames != null && bodyFrames.Length > 0)
+            {
+                bodyFrameIndex = (bodyFrameIndex + steps) % bodyFrames.Length;
+            }
+
+            // Apply frames to all active segments
+            for (int i = 0; i < segmentObjects.Count; i++)
+            {
+                var go = segmentObjects[i];
+                if (go == null || !go.activeSelf) continue;
+                var sr = segmentSpriteRenderers[i];
+                bool isHead = (i == 0);
+                var sp = isHead ? GetHeadFrame() : GetBodyFrame();
+                if (sp == null) continue;
+                sr.sprite = sp;
+                ApplySpriteUniformScale(go.transform, sp);
+            }
+        }
+    }
+
+    private Sprite GetBodyFrame()
+    {
+        if (bodyFrames != null && bodyFrames.Length > 0)
+        {
+            int idx = Mathf.Clamp(bodyFrameIndex % bodyFrames.Length, 0, bodyFrames.Length - 1);
+            return bodyFrames[idx];
+        }
+        return snakeSprite;
+    }
+
+    private Sprite GetHeadFrame()
+    {
+        if (headFrames != null && headFrames.Length > 0)
+        {
+            int idx = Mathf.Clamp(headFrameIndex % headFrames.Length, 0, headFrames.Length - 1);
+            return headFrames[idx];
+        }
+        return snakeSprite;
+    }
+
+    private void ApplySpriteUniformScale(Transform t, Sprite s)
+    {
+        if (t == null || s == null) return;
+        // Fit sprite within 1x1 cell preserving aspect: scale by max dimension
+        Vector2 size = s.bounds.size;
+        float maxDim = Mathf.Max(size.x, size.y);
+        if (maxDim <= 0f)
+        {
+            t.localScale = Vector3.one;
+            return;
+        }
+        float k = 1f / maxDim;
+        t.localScale = new Vector3(k, k, 1f);
+    }
+
+    // Head base orientation: facing Down (top -> bottom). Map to desired direction.
+    private float GetZRotationForHead(Vector2Int dir)
+    {
+        // Base frame faces Down; swap left/right mapping per user report
+        if (dir == Vector2Int.up) return 180f;
+        if (dir == Vector2Int.right) return 90f;    // was -90 (incorrect)
+        if (dir == Vector2Int.down) return 0f;
+        if (dir == Vector2Int.left) return -90f;    // was 90 (incorrect)
+        return 0f;
+    }
+
+    // Body base orientation: facing Right (left -> right)
+    private float GetZRotationForBody(Vector2Int dir)
+    {
+        if (dir == Vector2Int.up) return 90f;
+        if (dir == Vector2Int.right) return 0f;
+        if (dir == Vector2Int.down) return -90f;
+        if (dir == Vector2Int.left) return 180f;
+        return 0f;
     }
 
     private void SetFoodSpriteForIndex(int index)
@@ -1153,6 +1289,32 @@ public class SnakeGame : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
     }
 
+    private Sprite[] SliceSpriteSheet(Texture2D texture, int columns, int rows)
+    {
+        if (texture == null || columns <= 0 || rows <= 0) return null;
+        int texW = texture.width;
+        int texH = texture.height;
+        int cellW = texW / columns;
+        int cellH = texH / rows;
+        if (cellW <= 0 || cellH <= 0) return null;
+
+        var sprites = new List<Sprite>(columns * rows);
+        // Unity's texture origin is bottom-left; user described head base oriented top->bottom
+        // We iterate rows from top to bottom to match expected order visually
+        for (int row = rows - 1; row >= 0; row--)
+        {
+            for (int col = 0; col < columns; col++)
+            {
+                int x = col * cellW;
+                int y = row * cellH;
+                var rect = new Rect(x, y, cellW, cellH);
+                var sp = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), cellW, 0, SpriteMeshType.FullRect);
+                sprites.Add(sp);
+            }
+        }
+        return sprites.ToArray();
+    }
+
     private Sprite[] GenerateFoodSprites()
     {
         var sprites = new Sprite[5];
@@ -1166,30 +1328,18 @@ public class SnakeGame : MonoBehaviour
 
     private Sprite GenerateArrowSprite()
     {
+        // No longer used; kept for backward compatibility
         const int size = 8;
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        tex.name = "ArrowTexture";
+        tex.name = "ArrowTextureUnused";
         tex.filterMode = FilterMode.Point;
-        var transparent = new Color(0, 0, 0, 0);
-        var arrow = new Color(0.95f, 0.98f, 1f, 1f);
         for (int y = 0; y < size; y++)
         {
             for (int x = 0; x < size; x++)
             {
-                tex.SetPixel(x, y, transparent);
+                tex.SetPixel(x, y, new Color(0, 0, 0, 0));
             }
         }
-        // Shaft (pointing up)
-        for (int y = 0; y <= 5; y++)
-        {
-            tex.SetPixel(3, y, arrow);
-            tex.SetPixel(4, y, arrow);
-        }
-        // Head rows
-        int y6 = 6;
-        for (int x = 2; x <= 5; x++) tex.SetPixel(x, y6, arrow);
-        int y7 = 7;
-        for (int x = 1; x <= 6; x++) tex.SetPixel(x, y7, arrow);
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
     }
