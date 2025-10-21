@@ -71,6 +71,10 @@ public class MenuController : MonoBehaviour
         var playBtn = CreateButton(panelGO.transform, "Играть");
         playBtn.onClick.AddListener(() => SceneManager.LoadScene("Snake"));
 
+        // Settings button
+        var settingsBtn = CreateButton(panelGO.transform, "Настройки");
+        settingsBtn.onClick.AddListener(() => SceneManager.LoadScene("Настройки"));
+
         // Quit button
         var quitBtn = CreateButton(panelGO.transform, "Выход");
         quitBtn.onClick.AddListener(QuitApp);

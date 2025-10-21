@@ -8,6 +8,20 @@ using UnityEngine.InputSystem.UI;
 
 public class SettingsController : MonoBehaviour
 {
+    private static Sprite unitSprite;
+
+    private static Sprite GetUnitSprite()
+    {
+        if (unitSprite == null)
+        {
+            var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            tex.SetPixel(0, 0, Color.white);
+            tex.Apply();
+            unitSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+            unitSprite.name = "UnitSprite1x1";
+        }
+        return unitSprite;
+    }
     private void Start()
     {
         EnsureEventSystem();
@@ -177,7 +191,7 @@ public class SettingsController : MonoBehaviour
         bg.transform.SetParent(sliderGO.transform, false);
         var bgImg = bg.AddComponent<Image>();
         bgImg.color = new Color(0.1f, 0.12f, 0.16f, 1f);
-        bgImg.sprite = Sprite.Create(new Texture2D(1,1), new Rect(0,0,1,1), new Vector2(0.5f,0.5f));
+        bgImg.sprite = GetUnitSprite();
         var bgRT = bg.GetComponent<RectTransform>();
         bgRT.anchorMin = new Vector2(0, 0.25f);
         bgRT.anchorMax = new Vector2(1, 0.75f);
@@ -197,7 +211,7 @@ public class SettingsController : MonoBehaviour
         fill.transform.SetParent(fillArea.transform, false);
         var fillImg = fill.AddComponent<Image>();
         fillImg.color = new Color(0.2f, 0.6f, 1.0f, 0.9f);
-        fillImg.sprite = bgImg.sprite;
+        fillImg.sprite = GetUnitSprite();
         var fillRT = fill.GetComponent<RectTransform>();
         fillRT.anchorMin = new Vector2(0, 0);
         fillRT.anchorMax = new Vector2(1, 1);
@@ -217,7 +231,7 @@ public class SettingsController : MonoBehaviour
         handle.transform.SetParent(handleArea.transform, false);
         var handleImg = handle.AddComponent<Image>();
         handleImg.color = new Color(0.9f, 0.95f, 1f, 1f);
-        handleImg.sprite = bgImg.sprite;
+        handleImg.sprite = GetUnitSprite();
         var handleRT = handle.GetComponent<RectTransform>();
         handleRT.sizeDelta = new Vector2(16, 24);
 
