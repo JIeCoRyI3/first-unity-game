@@ -41,13 +41,14 @@ public class MenuController : MonoBehaviour
         canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         canvasScaler.referenceResolution = new Vector2(1280, 720);
         var crt = canvasGO.GetComponent<RectTransform>();
+        // Set rect in pixels; scale canvas so 100 px = 1 world unit
+        crt.sizeDelta = canvasScaler.referenceResolution;
         if (cam != null)
         {
-            float heightUnits = cam.orthographicSize * 2f;
-            float widthUnits = heightUnits * cam.aspect;
-            crt.sizeDelta = new Vector2(widthUnits, heightUnits);
+            canvas.worldCamera = cam; // needed for UI raycasts in world space
             canvas.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 0f);
         }
+        canvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
         canvas.overrideSorting = true;
         canvas.sortingOrder = 1000;
         canvasGO.AddComponent<GraphicRaycaster>();
