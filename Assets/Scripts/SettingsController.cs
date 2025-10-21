@@ -57,8 +57,23 @@ public class SettingsController : MonoBehaviour
         // Canvas
         var canvasGO = new GameObject("Canvas");
         var canvas = canvasGO.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvasGO.AddComponent<CanvasScaler>();
+        // World Space canvas so post-processing affects UI
+        canvas.renderMode = RenderMode.WorldSpace;
+        var canvasScaler = canvasGO.AddComponent<CanvasScaler>();
+        canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvasScaler.referenceResolution = new Vector2(1280, 720);
+        var cam = Camera.main;
+        var crt = canvasGO.GetComponent<RectTransform>();
+        if (cam != null)
+        {
+            float heightUnits = cam.orthographicSize * 2f;
+            float widthUnits = heightUnits * cam.aspect;
+            crt.sizeDelta = new Vector2(widthUnits, heightUnits);
+            canvas.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 0f);
+        }
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = 1000;
+        
         canvasGO.AddComponent<GraphicRaycaster>();
 
         // Background Panel
