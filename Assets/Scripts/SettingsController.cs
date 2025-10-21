@@ -64,8 +64,28 @@ public class SettingsController : MonoBehaviour
         canvasScaler.referenceResolution = new Vector2(1280, 720);
         var cam = Camera.main;
         var crt = canvasGO.GetComponent<RectTransform>();
-        // Set rect in pixels; scale canvas so 100 px = 1 world unit
-        crt.sizeDelta = canvasScaler.referenceResolution;
+        // Scale canvas so 100 px = 1 world unit
+        // Match the canvas size to the current camera view so it stretches full scene
+        float unitsPerPixel = 0.01f; // because we set localScale to 0.01
+        Vector2 desiredCanvasPixels = canvasScaler.referenceResolution;
+        if (cam != null)
+        {
+            if (cam.orthographic)
+            {
+                float worldHeight = cam.orthographicSize * 2f;
+                float worldWidth = worldHeight * Mathf.Max(0.0001f, cam.aspect);
+                desiredCanvasPixels = new Vector2(worldWidth / unitsPerPixel, worldHeight / unitsPerPixel);
+            }
+            else
+            {
+                // Approximate size at canvas Z (z = 0) for perspective cameras
+                float distance = Mathf.Abs(cam.transform.position.z - 0f);
+                float worldHeight = 2f * distance * Mathf.Tan(0.5f * cam.fieldOfView * Mathf.Deg2Rad);
+                float worldWidth = worldHeight * Mathf.Max(0.0001f, cam.aspect);
+                desiredCanvasPixels = new Vector2(worldWidth / unitsPerPixel, worldHeight / unitsPerPixel);
+            }
+        }
+        crt.sizeDelta = desiredCanvasPixels;
         if (cam != null)
         {
             canvas.worldCamera = cam; // needed for UI raycasts in world space
@@ -77,26 +97,68 @@ public class SettingsController : MonoBehaviour
         
         canvasGO.AddComponent<GraphicRaycaster>();
 
-        // Background Panel
+        // Background Panel (stretched)
         var panelGO = new GameObject("Panel");
         panelGO.transform.SetParent(canvasGO.transform, false);
         var panelImage = panelGO.AddComponent<Image>();
         panelImage.color = new Color(0.05f, 0.06f, 0.08f, 1f);
+        // Ensure solid fill regardless of sprite state
+        panelImage.sprite = GetUnitSprite();
         var panelRect = panelGO.GetComponent<RectTransform>();
         panelRect.anchorMin = new Vector2(0, 0);
         panelRect.anchorMax = new Vector2(1, 1);
         panelRect.offsetMin = Vector2.zero;
         panelRect.offsetMax = Vector2.zero;
 
-        // Layout
-        var layout = panelGO.AddComponent<VerticalLayoutGroup>();
-        layout.childAlignment = TextAnchor.MiddleCenter;
-        layout.spacing = 22f;
-        layout.padding = new RectOffset(40, 40, 60, 60);
+        // Scrollable content area to fit all sliders/buttons on any screen
+        var scrollGO = new GameObject("Scroll");
+        scrollGO.transform.SetParent(panelGO.transform, false);
+        var scrollRT = scrollGO.AddComponent<RectTransform>();
+        scrollRT.anchorMin = new Vector2(0, 0);
+        scrollRT.anchorMax = new Vector2(1, 1);
+        scrollRT.offsetMin = new Vector2(0, 0);
+        scrollRT.offsetMax = new Vector2(0, 0);
+        var scroll = scrollGO.AddComponent<ScrollRect>();
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.scrollSensitivity = 20f;
+
+        var viewportGO = new GameObject("Viewport");
+        viewportGO.transform.SetParent(scrollGO.transform, false);
+        var viewportRT = viewportGO.AddComponent<RectTransform>();
+        viewportRT.anchorMin = new Vector2(0, 0);
+        viewportRT.anchorMax = new Vector2(1, 1);
+        viewportRT.offsetMin = Vector2.zero;
+        viewportRT.offsetMax = Vector2.zero;
+        viewportGO.AddComponent<RectMask2D>();
+        var viewportImg = viewportGO.AddComponent<Image>();
+        viewportImg.color = new Color(0, 0, 0, 0); // transparent
+        scroll.viewport = viewportRT;
+
+        var contentGO = new GameObject("Content");
+        contentGO.transform.SetParent(viewportGO.transform, false);
+        var contentRT = contentGO.AddComponent<RectTransform>();
+        contentRT.anchorMin = new Vector2(0, 1);
+        contentRT.anchorMax = new Vector2(1, 1);
+        contentRT.pivot = new Vector2(0.5f, 1f);
+        contentRT.offsetMin = Vector2.zero;
+        contentRT.offsetMax = Vector2.zero;
+        scroll.content = contentRT;
+
+        var vLayout = contentGO.AddComponent<VerticalLayoutGroup>();
+        vLayout.childAlignment = TextAnchor.UpperCenter;
+        vLayout.spacing = 22f;
+        vLayout.padding = new RectOffset(40, 40, 60, 60);
+        vLayout.childControlWidth = true;
+        vLayout.childForceExpandWidth = true;
+        vLayout.childControlHeight = true;
+        vLayout.childForceExpandHeight = false;
+        var fitter = contentGO.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         // Title
         var titleGO = new GameObject("Title");
-        titleGO.transform.SetParent(panelGO.transform, false);
+        titleGO.transform.SetParent(contentGO.transform, false);
         var title = titleGO.AddComponent<Text>();
         title.text = "SETTINGS";
         title.font = PixelFontProvider.Get();
@@ -115,31 +177,31 @@ public class SettingsController : MonoBehaviour
         float contrastInit = SettingsManager.Instance != null ? SettingsManager.Instance.ContrastPercent : 50f; // 0..100
 
         // Volume sliders (with 10% snapping)
-        CreatePercentSlider(panelGO.transform, "Master", masterInit, (v01) => {
+        CreatePercentSlider(contentGO.transform, "Master", masterInit, (v01) => {
             SettingsManager.Instance?.SetMasterVolume(v01);
         });
-        CreatePercentSlider(panelGO.transform, "SFX", sfxInit, (v01) => {
+        CreatePercentSlider(contentGO.transform, "SFX", sfxInit, (v01) => {
             SettingsManager.Instance?.SetSfxVolume(v01);
         });
-        CreatePercentSlider(panelGO.transform, "Music", musicInit, (v01) => {
+        CreatePercentSlider(contentGO.transform, "Music", musicInit, (v01) => {
             SettingsManager.Instance?.SetMusicVolume(v01);
         });
 
         // Brightness 0..100%
-        CreateLabeledSlider(panelGO.transform, "Brightness", 0f, 100f, brightInit, (val) => {
+        CreateLabeledSlider(contentGO.transform, "Brightness", 0f, 100f, brightInit, (val) => {
             SettingsManager.Instance?.SetBrightnessPercent(val);
         });
 
         // Contrast 0..100%
-        CreateLabeledSlider(panelGO.transform, "Contrast", 0f, 100f, contrastInit, (val) => {
+        CreateLabeledSlider(contentGO.transform, "Contrast", 0f, 100f, contrastInit, (val) => {
             SettingsManager.Instance?.SetContrastPercent(val);
         });
 
         // Single snake preview below all sliders
-        AddSnakePreview(panelGO.transform);
+        AddSnakePreview(contentGO.transform);
 
         // Back button
-        var backBtn = CreateButton(panelGO.transform, "Back");
+        var backBtn = CreateButton(contentGO.transform, "Back");
         backBtn.onClick.AddListener(() => SceneManager.LoadScene("Menu"));
     }
 
