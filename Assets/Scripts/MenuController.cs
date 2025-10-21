@@ -34,7 +34,14 @@ public class MenuController : MonoBehaviour
         // Canvas
         var canvasGO = new GameObject("Canvas");
         var canvas = canvasGO.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        // Use ScreenSpaceCamera so post-processing affects UI too
+        canvas.renderMode = RenderMode.ScreenSpaceCamera;
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            canvas.worldCamera = cam;
+            canvas.planeDistance = 1f;
+        }
         canvasGO.AddComponent<CanvasScaler>();
         canvasGO.AddComponent<GraphicRaycaster>();
 

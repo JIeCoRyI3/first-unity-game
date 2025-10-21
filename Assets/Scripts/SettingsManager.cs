@@ -91,14 +91,18 @@ public class SettingsManager : MonoBehaviour
 
     private void EnablePostProcessingOnMainCamera()
     {
-        var cam = Camera.main;
-        if (cam == null) return;
-        var additional = cam.GetComponent<UniversalAdditionalCameraData>();
-        if (additional == null)
+        // Ensure post-processing is enabled on all active cameras in the scene
+        var cams = Object.FindObjectsOfType<Camera>();
+        foreach (var cam in cams)
         {
-            additional = cam.gameObject.AddComponent<UniversalAdditionalCameraData>();
+            if (cam == null || !cam.enabled) continue;
+            var additional = cam.GetComponent<UniversalAdditionalCameraData>();
+            if (additional == null)
+            {
+                additional = cam.gameObject.AddComponent<UniversalAdditionalCameraData>();
+            }
+            additional.renderPostProcessing = true;
         }
-        additional.renderPostProcessing = true;
     }
 
     private void ApplyAllSettings()
