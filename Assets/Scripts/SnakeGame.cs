@@ -811,16 +811,18 @@ public class SnakeGame : MonoBehaviour
                         {
                             arrow.SetActive(true);
                             var enemyPos = enemyCells[targetIdx];
-                            Vector2 worldFrom = new Vector2(pos.x + 0.5f, pos.y + 0.5f);
-                            Vector2 worldTo = new Vector2(enemyPos.x + 0.5f, enemyPos.y + 0.5f);
-                            Vector2 dir = (worldTo - worldFrom);
-                            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f; // our sprite points up
-                            arrow.transform.position = new Vector3(worldFrom.x, worldFrom.y, 0f);
+                            Vector2 from = new Vector2(pos.x + 0.5f, pos.y + 0.5f);
+                            Vector2 to = new Vector2(enemyPos.x + 0.5f, enemyPos.y + 0.5f);
+                            Vector2 dir = (to - from);
+                            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f; // sprite points up by default
+                            float dist = dir.magnitude;
+
+                            // Place arrow so that its tail is at 'from' and its head at 'to'
+                            // Our generated sprite has pivot at (0.5, 0.0) and height of 32 pixels per unit
+                            // So localScale.y scales its length from pivot upwards
                             arrow.transform.rotation = Quaternion.Euler(0f, 0f, angle);
-                            // scale length to distance
-                            float len = Mathf.Clamp(dir.magnitude, 0.5f, 3.0f);
-                            // sprite pixels per unit equals height (h) in GenerateDottedArrowSprite()
-                            arrow.transform.localScale = new Vector3(1f, len, 1f);
+                            arrow.transform.position = new Vector3(from.x, from.y, 0f);
+                            arrow.transform.localScale = new Vector3(1f, dist, 1f);
                         }
                         else
                         {
@@ -1284,18 +1286,22 @@ public class SnakeGame : MonoBehaviour
             var fc = foodCells[i];
             // if already adjacent (radius 1), don't move by attraction (eating handles it)
             int bestIdx = -1;
-            float bestDist = 9999f;
+            int bestCheb = int.MaxValue;
             int equalCount = 0;
             for (int e = 0; e < enemyCells.Count; e++)
             {
-                float d = Vector2Int.Distance(fc, enemyCells[e]);
-                if (d < bestDist - 0.001f)
+                var ec = enemyCells[e];
+                int dx = Mathf.Abs(ec.x - fc.x);
+                int dy = Mathf.Abs(ec.y - fc.y);
+                int cheb = Mathf.Max(dx, dy);
+                if (cheb > 2) continue; // only consider enemies within radius 2 (Chebyshev)
+                if (cheb < bestCheb)
                 {
-                    bestDist = d;
+                    bestCheb = cheb;
                     bestIdx = e;
                     equalCount = 1;
                 }
-                else if (Mathf.Abs(d - bestDist) <= 0.001f)
+                else if (cheb == bestCheb)
                 {
                     // equal distance -> choose randomly among equals
                     equalCount++;
@@ -1305,6 +1311,7 @@ public class SnakeGame : MonoBehaviour
                     }
                 }
             }
+            // Only target if there is an enemy within Chebyshev radius 2
             foodTargetEnemyIndex[i] = bestIdx;
         }
 
@@ -1326,9 +1333,11 @@ public class SnakeGame : MonoBehaviour
             if (target < 0 || target >= enemyCells.Count) continue;
             var fc = foodCells[i];
             var ec = enemyCells[target];
-            float dist = Vector2Int.Distance(fc, ec);
-            if (dist > 2.0001f) continue; // outside radius 2
-            if (dist <= 1.0001f) continue; // already adjacent
+            int dx0 = Mathf.Abs(ec.x - fc.x);
+            int dy0 = Mathf.Abs(ec.y - fc.y);
+            int cheb0 = Mathf.Max(dx0, dy0);
+            if (cheb0 > 2) continue; // outside radius 2
+            if (cheb0 <= 1) continue; // already adjacent
 
             // Preferred direction towards enemy
             Vector2Int delta = new Vector2Int(Mathf.Clamp(ec.x - fc.x, -1, 1), Mathf.Clamp(ec.y - fc.y, -1, 1));
@@ -1358,8 +1367,11 @@ public class SnakeGame : MonoBehaviour
             {
                 if (cand.x < 0 || cand.y < 0 || cand.x >= gridWidth || cand.y >= gridHeight) continue;
                 if (occupied.Contains(cand)) continue;
-                // Ensure distance reduced
-                if (Vector2Int.Distance(cand, ec) + 0.0001f >= dist) continue;
+                // Ensure Chebyshev distance reduced
+                int dx1 = Mathf.Abs(ec.x - cand.x);
+                int dy1 = Mathf.Abs(ec.y - cand.y);
+                int cheb1 = Mathf.Max(dx1, dy1);
+                if (cheb1 >= cheb0) continue;
                 // Move food
                 occupied.Remove(fc);
                 foodCells[i] = cand;
