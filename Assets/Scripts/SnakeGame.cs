@@ -298,6 +298,7 @@ public class SnakeGame : MonoBehaviour
             if (bodyTex != null)
             {
                 bodyTex.filterMode = FilterMode.Point;
+                bodyTex.wrapMode = TextureWrapMode.Clamp;
                 bodyFrames = SliceSpriteSheet(bodyTex, 2, 2);
             }
             // Fallback to importer-sliced sprites for "snake.body"
@@ -313,6 +314,7 @@ public class SnakeGame : MonoBehaviour
                 if (legacyBodyTex != null)
                 {
                     legacyBodyTex.filterMode = FilterMode.Point;
+                    legacyBodyTex.wrapMode = TextureWrapMode.Clamp;
                     bodyFrames = SliceSpriteSheet(legacyBodyTex, 2, 2);
                 }
             }
@@ -327,6 +329,7 @@ public class SnakeGame : MonoBehaviour
                 if (bodySheetTex != null)
                 {
                     bodySheetTex.filterMode = FilterMode.Point;
+                    bodySheetTex.wrapMode = TextureWrapMode.Clamp;
                     bodyFrames = SliceSpriteSheet(bodySheetTex, 6, 6);
                 }
             }
@@ -343,6 +346,7 @@ public class SnakeGame : MonoBehaviour
             if (headTex != null)
             {
                 headTex.filterMode = FilterMode.Point;
+                headTex.wrapMode = TextureWrapMode.Clamp;
                 headFrames = SliceSpriteSheet(headTex, 2, 2);
             }
             if (headFrames == null || headFrames.Length == 0)
@@ -1864,7 +1868,7 @@ public class SnakeGame : MonoBehaviour
                 var sr = obj.AddComponent<SpriteRenderer>();
                 sr.sprite = cellSprite;
                 sr.color = borderColor;
-                sr.sortingOrder = -1; // behind snake and food
+                sr.sortingOrder = 2; // above snake, corner masks and food
             }
             return obj;
         }
@@ -2264,6 +2268,7 @@ public class SnakeGame : MonoBehaviour
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
         tex.name = "SnakeTexture";
         tex.filterMode = FilterMode.Point;
+        tex.wrapMode = TextureWrapMode.Clamp;
 
         // Checker pattern with subtle shading
         var cLight = new Color(0.2f, 0.8f, 0.35f, 1f);
@@ -2586,6 +2591,10 @@ public class SnakeGame : MonoBehaviour
 
         Button menuBtn = CreateUIButton(dialog.transform, "Back to menu");
         menuBtn.onClick.AddListener(() => { HideGameOverUI(); SceneManager.LoadScene("Menu"); });
+
+        // Keyboard / mouse navigation with outline in Game Over dialog
+        var nav = dialog.AddComponent<LevelUpController>();
+        nav.Initialize(new System.Collections.Generic.List<UnityEngine.UI.Button> { restartBtn, menuBtn });
     }
 
     private Button CreateUIButton(Transform parent, string label)

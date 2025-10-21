@@ -1,14 +1,18 @@
 using UnityEngine;
+using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem.UI;
+using UnityEngine.InputSystem;
 #endif
 
 public class SettingsController : MonoBehaviour
 {
     private static Sprite unitSprite;
+    private List<Selectable> selectables;
+    private int selectedIndex;
 
     private static Sprite GetUnitSprite()
     {
@@ -27,6 +31,8 @@ public class SettingsController : MonoBehaviour
         EnsureEventSystem();
         EnsureSettingsManager();
         BuildSettingsUI();
+        CacheSelectables();
+        UpdateSelectionVisuals();
     }
 
     private void EnsureSettingsManager()
@@ -203,6 +209,122 @@ public class SettingsController : MonoBehaviour
         // Back button
         var backBtn = CreateButton(contentGO.transform, "Back");
         backBtn.onClick.AddListener(() => SceneManager.LoadScene("Menu"));
+    }
+
+    private void CacheSelectables()
+    {
+        var all = new List<Selectable>(FindObjectsOfType<Selectable>());
+        all.Sort((a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+        selectables = new List<Selectable>();
+        foreach (var s in all)
+        {
+            if (s == null) continue;
+            if (s.GetComponentInParent<Canvas>() != null) selectables.Add(s);
+        }
+        selectedIndex = Mathf.Clamp(selectedIndex, 0, Mathf.Max(0, selectables.Count - 1));
+        // Hover moves selection to hovered element
+        foreach (var s in selectables)
+        {
+            var img = s.targetGraphic as Image;
+            if (img == null) img = s.GetComponent<Image>();
+            if (img == null) continue;
+            var et = img.gameObject.GetComponent<EventTrigger>();
+            if (et == null) et = img.gameObject.AddComponent<EventTrigger>();
+            var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            entry.callback = new EventTrigger.TriggerEvent();
+            int idx = selectables.IndexOf(s);
+            entry.callback.AddListener((_) => { selectedIndex = idx; UpdateSelectionVisuals(); });
+            et.triggers.Add(entry);
+        }
+    }
+
+    private void Update()
+    {
+        if (selectables == null || selectables.Count == 0) return;
+#if ENABLE_INPUT_SYSTEM
+        var kb = Keyboard.current;
+        if (kb != null)
+        {
+            if (kb.upArrowKey.wasPressedThisFrame) { MoveSelection(1); }
+            else if (kb.downArrowKey.wasPressedThisFrame) { MoveSelection(-1); }
+            else if (kb.leftArrowKey.wasPressedThisFrame) { AdjustCurrent(-1); }
+            else if (kb.rightArrowKey.wasPressedThisFrame) { AdjustCurrent(1); }
+            else if (kb.enterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame) { ActivateCurrent(); }
+        }
+#else
+        if (Input.GetKeyDown(KeyCode.UpArrow)) MoveSelection(1);
+        else if (Input.GetKeyDown(KeyCode.DownArrow)) MoveSelection(-1);
+        else if (Input.GetKeyDown(KeyCode.LeftArrow)) AdjustCurrent(-1);
+        else if (Input.GetKeyDown(KeyCode.RightArrow)) AdjustCurrent(1);
+        else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space)) ActivateCurrent();
+#endif
+    }
+
+    private void MoveSelection(int delta)
+    {
+        if (selectables == null || selectables.Count == 0) return;
+        selectedIndex = (selectedIndex + delta + selectables.Count) % selectables.Count;
+        UpdateSelectionVisuals();
+    }
+
+    private void ActivateCurrent()
+    {
+        var s = GetCurrent();
+        if (s == null) return;
+        var btn = s as Button;
+        if (btn != null) btn.onClick?.Invoke();
+    }
+
+    private void AdjustCurrent(int direction)
+    {
+        var s = GetCurrent();
+        if (s == null) return;
+        var slider = s as Slider;
+        if (slider != null)
+        {
+            // Use larger step for integer percent sliders, small step otherwise
+            float step = slider.wholeNumbers ? 10f : Mathf.Max(0.0001f, (slider.maxValue - slider.minValue) / 20f);
+            slider.value = Mathf.Clamp(slider.value + step * direction, slider.minValue, slider.maxValue);
+        }
+    }
+
+    private Selectable GetCurrent()
+    {
+        if (selectedIndex < 0 || selectedIndex >= (selectables?.Count ?? 0)) return null;
+        return selectables[selectedIndex];
+    }
+
+    private void UpdateSelectionVisuals()
+    {
+        if (selectables == null) return;
+        for (int i = 0; i < selectables.Count; i++)
+        {
+            var s = selectables[i];
+            if (s == null) continue;
+            var img = s.targetGraphic as Image;
+            if (img == null)
+            {
+                // Fallback: try Image on same object
+                img = s.GetComponent<Image>();
+            }
+            if (img == null) continue;
+            if (i == selectedIndex)
+            {
+                var ol = img.GetComponent<Outline>();
+                if (ol == null) ol = img.gameObject.AddComponent<Outline>();
+                ol.effectColor = Color.white;
+                ol.effectDistance = new Vector2(2f, 2f);
+                ol.useGraphicAlpha = false;
+            }
+            else
+            {
+                var ol = img.GetComponent<Outline>();
+                if (ol == null) ol = img.gameObject.AddComponent<Outline>();
+                ol.effectColor = new Color(1f, 1f, 1f, 0f);
+                ol.effectDistance = new Vector2(2f, 2f);
+                ol.useGraphicAlpha = false;
+            }
+        }
     }
 
     private void AddSnakePreview(Transform parent)
