@@ -25,7 +25,7 @@ public class SnakeGame : MonoBehaviour
 
     [Header("Enemies")]
     [SerializeField, Tooltip("Seconds between enemy spawns")] private float enemySpawnIntervalSeconds = 30f;
-    [SerializeField, Tooltip("Damage tick interval while colliding with enemy")] private float enemyDamageIntervalSeconds = 0.5f;
+    [SerializeField, Tooltip("Damage tick interval while colliding with enemy")] private float enemyDamageIntervalSeconds = 0.7f;
     [SerializeField, Tooltip("HP per enemy")] private int enemyHpPer = 5;
     [SerializeField, Tooltip("Enemy tint color")] private Color enemyColor = new Color(0.9f, 0.25f, 0.85f, 1f);
     [SerializeField, Tooltip("Seconds between food attraction steps (1 cell)")] private float foodAttractIntervalSeconds = 3f;
@@ -107,6 +107,12 @@ public class SnakeGame : MonoBehaviour
     private Text gameTimeText;
     private Image enemySpawnFillImage;
 
+    // Pre-start countdown overlay
+    private GameObject countdownOverlayGO;
+    private Text countdownText;
+    private bool isCountingDown;
+    private float countdownTimer;
+
     // Level-up modal
     private GameObject levelUpCanvasGO;
 
@@ -150,6 +156,7 @@ public class SnakeGame : MonoBehaviour
         // First enemy should spawn at 20 seconds
         defaultEnemySpawnIntervalSeconds = 20f;
         StartNewGame();
+        BeginCountdown(2f);
     }
 
     private void Update()
@@ -160,6 +167,12 @@ public class SnakeGame : MonoBehaviour
         if (GetRestartPressed())
         {
             StartNewGame();
+            return;
+        }
+
+        if (isCountingDown)
+        {
+            UpdateCountdown(Time.deltaTime);
             return;
         }
 
@@ -311,6 +324,8 @@ public class SnakeGame : MonoBehaviour
         moveTimer = 0f;
         isAlive = true;
         isPaused = false;
+        isCountingDown = false;
+        countdownTimer = 0f;
         moveIntervalSeconds = defaultMoveIntervalSeconds;
         foodNeedsSprite = false;
         pendingLevelUps = 0;
@@ -1272,12 +1287,12 @@ public class SnakeGame : MonoBehaviour
             if (engagedEnemyIndex >= 0 && engagedEnemyIndex < enemyHps.Count)
             {
                 enemyHps[engagedEnemyIndex] = Mathf.Max(0, enemyHps[engagedEnemyIndex] - 1);
-                // Trigger red damage flash for 0.5s on hit
+                // Trigger red damage flash for 0.4s on hit
                 if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
                 while (enemyFlashTimers.Count < enemyObjects.Count) enemyFlashTimers.Add(0f);
                 if (engagedEnemyIndex < enemyFlashTimers.Count)
                 {
-                    enemyFlashTimers[engagedEnemyIndex] = 0.5f;
+                    enemyFlashTimers[engagedEnemyIndex] = 0.4f;
                 }
                 if (enemyHps[engagedEnemyIndex] <= 0)
                 {
@@ -1928,6 +1943,36 @@ public class SnakeGame : MonoBehaviour
         enemyFillRT.offsetMin = new Vector2(2, 2);
         enemyFillRT.offsetMax = new Vector2(-2, -2);
         enemySpawnFillImage = enemyFillImg;
+
+        // Countdown overlay (hidden by default)
+        var overlay = new GameObject("CountdownOverlay");
+        overlay.transform.SetParent(canvasGO.transform, false);
+        var overlayImg = overlay.AddComponent<Image>();
+        overlayImg.color = new Color(0f, 0f, 0f, 0.4f);
+        overlayImg.sprite = cellSprite;
+        var overlayRT = overlay.GetComponent<RectTransform>();
+        overlayRT.anchorMin = new Vector2(0, 0);
+        overlayRT.anchorMax = new Vector2(1, 1);
+        overlayRT.offsetMin = Vector2.zero;
+        overlayRT.offsetMax = Vector2.zero;
+
+        var cTextGO = new GameObject("Text");
+        cTextGO.transform.SetParent(overlay.transform, false);
+        var cText = cTextGO.AddComponent<Text>();
+        cText.font = PixelFontProvider.Get();
+        cText.fontSize = 96;
+        cText.fontStyle = FontStyle.Bold;
+        cText.alignment = TextAnchor.MiddleCenter;
+        cText.color = new Color(0.95f, 0.97f, 1f, 1f);
+        var cTextRT = cTextGO.GetComponent<RectTransform>();
+        cTextRT.anchorMin = new Vector2(0f, 0f);
+        cTextRT.anchorMax = new Vector2(1f, 1f);
+        cTextRT.offsetMin = Vector2.zero;
+        cTextRT.offsetMax = Vector2.zero;
+
+        countdownOverlayGO = overlay;
+        countdownText = cText;
+        countdownOverlayGO.SetActive(false);
     }
 
     private void UpdateHud()
@@ -2277,15 +2322,15 @@ public class SnakeGame : MonoBehaviour
         var dialogImg = dialog.AddComponent<Image>();
         dialogImg.color = new Color(0.12f, 0.14f, 0.18f, 1f);
         var dialogRT = dialog.GetComponent<RectTransform>();
-        dialogRT.sizeDelta = new Vector2(520, 280);
+        dialogRT.sizeDelta = new Vector2(720, 360);
         dialogRT.anchorMin = new Vector2(0.5f, 0.5f);
         dialogRT.anchorMax = new Vector2(0.5f, 0.5f);
         dialogRT.anchoredPosition = Vector2.zero;
 
         var v = dialog.AddComponent<VerticalLayoutGroup>();
         v.childAlignment = TextAnchor.MiddleCenter;
-        v.spacing = 14f;
-        v.padding = new RectOffset(20, 20, 20, 20);
+        v.spacing = 18f;
+        v.padding = new RectOffset(40, 40, 40, 40);
 
         var titleGO = new GameObject("Title");
         titleGO.transform.SetParent(dialog.transform, false);
@@ -2365,6 +2410,34 @@ public class SnakeGame : MonoBehaviour
 #else
             es.AddComponent<StandaloneInputModule>();
 #endif
+        }
+    }
+
+    private void BeginCountdown(float seconds)
+    {
+        isCountingDown = true;
+        countdownTimer = Mathf.Max(0f, seconds);
+        if (countdownOverlayGO != null)
+        {
+            countdownOverlayGO.SetActive(true);
+        }
+        UpdateCountdown(0f);
+    }
+
+    private void UpdateCountdown(float dt)
+    {
+        if (!isCountingDown) return;
+        countdownTimer -= dt;
+        float remaining = Mathf.Max(0f, countdownTimer);
+        int display = Mathf.CeilToInt(remaining);
+        if (countdownText != null)
+        {
+            countdownText.text = display.ToString();
+        }
+        if (countdownTimer <= 0f)
+        {
+            isCountingDown = false;
+            if (countdownOverlayGO != null) countdownOverlayGO.SetActive(false);
         }
     }
 }

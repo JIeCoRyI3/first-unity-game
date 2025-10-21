@@ -91,8 +91,8 @@ public class SettingsController : MonoBehaviour
         // Layout
         var layout = panelGO.AddComponent<VerticalLayoutGroup>();
         layout.childAlignment = TextAnchor.MiddleCenter;
-        layout.spacing = 18f;
-        layout.padding = new RectOffset(20, 20, 40, 40);
+        layout.spacing = 22f;
+        layout.padding = new RectOffset(40, 40, 60, 60);
 
         // Title
         var titleGO = new GameObject("Title");
@@ -105,7 +105,7 @@ public class SettingsController : MonoBehaviour
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.92f, 0.96f, 1f, 1f);
         var titleLE = titleGO.AddComponent<LayoutElement>();
-        titleLE.minHeight = 64f;
+        titleLE.minHeight = 72f;
 
         // Sliders
         float soundInit = SettingsManager.Instance != null ? SettingsManager.Instance.SoundVolume : 0.8f;

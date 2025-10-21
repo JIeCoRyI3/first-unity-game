@@ -102,6 +102,7 @@ public class MenuController : MonoBehaviour
         btnGO.transform.SetParent(parent, false);
         var image = btnGO.AddComponent<Image>();
         image.color = new Color(0.15f, 0.18f, 0.22f, 1f);
+        image.sprite = PixelUnitSprite();
 
         var btn = btnGO.AddComponent<Button>();
         var colors = btn.colors;
@@ -112,14 +113,17 @@ public class MenuController : MonoBehaviour
         btn.colors = colors;
 
         var rt = btnGO.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(320, 80);
+        rt.sizeDelta = new Vector2(420, 96);
+        var le = btnGO.AddComponent<LayoutElement>();
+        le.minWidth = 420f;
+        le.minHeight = 90f;
 
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(btnGO.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = text;
         t.font = PixelFontProvider.Get();
-        t.fontSize = 42;
+        t.fontSize = 56;
         t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 0.9f, 1f);
@@ -130,6 +134,18 @@ public class MenuController : MonoBehaviour
         textRT.offsetMax = Vector2.zero;
 
         return btn;
+    }
+
+    private static Sprite pixelUnitSprite;
+    private static Sprite PixelUnitSprite()
+    {
+        if (pixelUnitSprite != null) return pixelUnitSprite;
+        var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        tex.SetPixel(0, 0, Color.white);
+        tex.Apply();
+        pixelUnitSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+        pixelUnitSprite.name = "UnitSprite1x1_Menu";
+        return pixelUnitSprite;
     }
 
     private void QuitApp()
