@@ -1023,9 +1023,8 @@ public class SnakeGame : MonoBehaviour
                     }
                 }
             }
-            // Cap extreme stacking and prevent overscaling outside the cell
+            // Cap extreme stacking
             scale = Mathf.Min(baseScale + snakePulseMaxStack, scale);
-            scale = Mathf.Min(1f, scale);
             seg.transform.localScale = new Vector3(scale, scale, 1f);
         }
     }

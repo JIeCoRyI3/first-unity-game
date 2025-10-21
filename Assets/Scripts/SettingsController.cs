@@ -231,15 +231,15 @@ public class SettingsController : MonoBehaviour
         var kb = Keyboard.current;
         if (kb != null)
         {
-            if (kb.upArrowKey.wasPressedThisFrame) { MoveSelection(-1); }
-            else if (kb.downArrowKey.wasPressedThisFrame) { MoveSelection(1); }
+            if (kb.upArrowKey.wasPressedThisFrame) { MoveSelection(1); }
+            else if (kb.downArrowKey.wasPressedThisFrame) { MoveSelection(-1); }
             else if (kb.leftArrowKey.wasPressedThisFrame) { AdjustCurrent(-1); }
             else if (kb.rightArrowKey.wasPressedThisFrame) { AdjustCurrent(1); }
             else if (kb.enterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame) { ActivateCurrent(); }
         }
 #else
-        if (Input.GetKeyDown(KeyCode.UpArrow)) MoveSelection(-1);
-        else if (Input.GetKeyDown(KeyCode.DownArrow)) MoveSelection(1);
+        if (Input.GetKeyDown(KeyCode.UpArrow)) MoveSelection(1);
+        else if (Input.GetKeyDown(KeyCode.DownArrow)) MoveSelection(-1);
         else if (Input.GetKeyDown(KeyCode.LeftArrow)) AdjustCurrent(-1);
         else if (Input.GetKeyDown(KeyCode.RightArrow)) AdjustCurrent(1);
         else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space)) ActivateCurrent();
@@ -268,7 +268,8 @@ public class SettingsController : MonoBehaviour
         var slider = s as Slider;
         if (slider != null)
         {
-            float step = slider.wholeNumbers ? 1f : Mathf.Max(0.0001f, (slider.maxValue - slider.minValue) / 20f);
+            // Use larger step for integer percent sliders, small step otherwise
+            float step = slider.wholeNumbers ? 10f : Mathf.Max(0.0001f, (slider.maxValue - slider.minValue) / 20f);
             slider.value = Mathf.Clamp(slider.value + step * direction, slider.minValue, slider.maxValue);
         }
     }
