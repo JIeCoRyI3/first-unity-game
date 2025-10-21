@@ -2455,14 +2455,19 @@ public class SnakeGame : MonoBehaviour
         // Choose wedge quadrant based on turn handedness:
         // - Clockwise (right turn): use outer corner aligned with (fromTail + toHead)
         // - Counter-clockwise (left turn): use the opposite corner (-(fromTail + toHead))
-        int cross = (fromTail.x * toHead.y) - (fromTail.y * toHead.x); // >0 => CCW, <0 => CW
+        // Use incoming direction (towards this cell) to determine handedness correctly
+        Vector2Int inDir = new Vector2Int(-fromTail.x, -fromTail.y);
+        int cross = (inDir.x * toHead.y) - (inDir.y * toHead.x); // >0 => CCW, <0 => CW
+        // Keep base quadrant from current implementation to preserve CW correctness
         Vector2Int sum = fromTail + toHead; // one of (±1, ±1)
         int qx = sum.x >= 0 ? 1 : -1;
         int qy = sum.y >= 0 ? 1 : -1;
         if (cross > 0)
         {
-            // CCW: use opposite corner
-            qx = -qx; qy = -qy;
+            // CCW: previously inverted; now swap X/Y before invert to match user's expectation
+            // This effectively mirrors along the diagonal so top-right <-> bottom-left, top-left <-> bottom-right
+            int tqx = qx; int tqy = qy;
+            qx = -tqy; qy = -tqx;
         }
         // Map quadrant to rotation where 0° is top-right corner in our sprite
         if (qx == 1 && qy == 1) return 0f;      // top-right
