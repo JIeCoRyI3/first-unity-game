@@ -28,6 +28,8 @@ public class SnakeGame : MonoBehaviour
     [SerializeField, Tooltip("Damage tick interval while colliding with enemy")] private float enemyDamageIntervalSeconds = 0.5f;
     [SerializeField, Tooltip("HP per enemy")] private int enemyHpPer = 5;
     [SerializeField, Tooltip("Enemy tint color")] private Color enemyColor = new Color(0.9f, 0.25f, 0.85f, 1f);
+    [SerializeField, Tooltip("Seconds between food attraction steps (1 cell)")] private float foodAttractIntervalSeconds = 3f;
+    [SerializeField, Tooltip("Seconds between enemy eating checks")] private float enemyEatIntervalSeconds = 3f;
 
     [Header("Visuals")]
     [SerializeField, Tooltip("Border color")] private Color borderColor = new Color(0.85f, 0.85f, 0.95f);
@@ -70,6 +72,7 @@ public class SnakeGame : MonoBehaviour
     private int maxFoodCount = 1;
     private Sprite cellSprite;
     private Sprite snakeSprite;
+    private Sprite enemySprite;
     private Sprite[] bodyFrames;
     private Sprite[] headFrames;
     private Sprite[] foodSprites;
@@ -161,9 +164,9 @@ public class SnakeGame : MonoBehaviour
         UpdateEngagementDamage(dt);
         totalPlayTimeSeconds += dt;
         UpdateTimersHud();
-        // Enemy food influence and eating checks tick each second
-        UpdateEnemyFoodAttraction(dt);
+        // Enemy eating should occur before food movement to avoid instant disappear after move
         UpdateEnemyEating(dt);
+        UpdateEnemyFoodAttraction(dt);
 
         moveTimer += dt;
         if (moveTimer >= moveIntervalSeconds)
@@ -227,6 +230,10 @@ public class SnakeGame : MonoBehaviour
         if (snakeSprite == null)
         {
             snakeSprite = GenerateSnakeSprite();
+        }
+        if (enemySprite == null)
+        {
+            enemySprite = GenerateScaryEnemySprite();
         }
         if (foodSprites == null || foodSprites.Length != 5)
         {
@@ -821,7 +828,10 @@ public class SnakeGame : MonoBehaviour
                             // Our generated sprite has pivot at (0.5, 0.0) and height of 32 pixels per unit
                             // So localScale.y scales its length from pivot upwards
                             arrow.transform.rotation = Quaternion.Euler(0f, 0f, angle);
-                            arrow.transform.position = new Vector3(from.x, from.y, 0f);
+                            // Position at the exact midpoint so we don't see artifacts if PPU differs
+                            Vector2 mid = (from + to) * 0.5f;
+                            arrow.transform.position = new Vector3(mid.x, mid.y, 0f);
+                            // Scale Y to full length; X kept thin constant
                             arrow.transform.localScale = new Vector3(1f, dist, 1f);
                         }
                         else
@@ -1007,11 +1017,11 @@ public class SnakeGame : MonoBehaviour
         if (renderContainer == null) EnsureRuntimeAssets();
         while (enemyObjects.Count <= index)
         {
-            var go = CreateCellGO("Enemy", enemyColor, cellSprite);
+            var go = CreateCellGO("Enemy", enemyColor, enemySprite != null ? enemySprite : cellSprite);
             var sr = go.GetComponent<SpriteRenderer>();
             if (sr != null)
             {
-                sr.color = enemyColor;
+                sr.color = Color.white;
             }
             enemyObjects.Add(go);
         }
@@ -1275,12 +1285,18 @@ public class SnakeGame : MonoBehaviour
         if (enemyCells == null || enemyCells.Count == 0) return;
         if (foodCells == null || foodCells.Count == 0) return;
         foodAttractTimer += dt;
-        if (foodAttractTimer < 1f) return;
-        foodAttractTimer -= 1f;
+        if (foodAttractTimer < Mathf.Max(0.01f, foodAttractIntervalSeconds)) return;
+        foodAttractTimer -= Mathf.Max(0.01f, foodAttractIntervalSeconds);
 
         // Recompute targets (one enemy per food if ties pick one randomly)
         EnsureFoodContainers();
         while (foodTargetEnemyIndex.Count < foodCells.Count) foodTargetEnemyIndex.Add(-1);
+        // Also ensure arrow list matches count
+        if (foodArrowContainers == null) foodArrowContainers = new List<GameObject>();
+        while (foodArrowContainers.Count < foodCells.Count)
+        {
+            EnsureFoodObjectForIndex(foodArrowContainers.Count);
+        }
         for (int i = 0; i < foodCells.Count; i++)
         {
             var fc = foodCells[i];
@@ -1388,8 +1404,8 @@ public class SnakeGame : MonoBehaviour
         if (enemyCells == null || enemyCells.Count == 0) return;
         if (foodCells == null || foodCells.Count == 0) return;
         enemyEatTimer += dt;
-        if (enemyEatTimer < 1f) return;
-        enemyEatTimer -= 1f;
+        if (enemyEatTimer < Mathf.Max(0.01f, enemyEatIntervalSeconds)) return;
+        enemyEatTimer -= Mathf.Max(0.01f, enemyEatIntervalSeconds);
 
         // Each second, each enemy may eat at most one adjacent food. Randomize neighbor order.
         var neighborDirs = new List<Vector2Int>
@@ -2008,6 +2024,57 @@ public class SnakeGame : MonoBehaviour
                 }
             }
         }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
+    }
+
+    private Sprite GenerateScaryEnemySprite()
+    {
+        // Procedurally generate a simple "scary" face sprite (16x16): eyes + fangs
+        const int size = 16;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.name = "EnemyScaryTexture";
+        tex.filterMode = FilterMode.Point;
+        Color transparent = new Color(0,0,0,0);
+        Color body = new Color(0.1f, 0.0f, 0.15f, 1f);
+        Color outline = new Color(0.9f, 0.25f, 0.85f, 1f);
+        Color eye = new Color(1f, 0.2f, 0.2f, 1f);
+        Color fang = new Color(0.95f, 0.95f, 1f, 1f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                tex.SetPixel(x, y, transparent);
+            }
+        }
+
+        // Roundish body
+        Vector2 c = new Vector2(7.5f, 8f);
+        float r = 7f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x, y), c);
+                if (d <= r)
+                {
+                    bool border = d >= r - 1.2f;
+                    tex.SetPixel(x, y, border ? outline : body);
+                }
+            }
+        }
+
+        // Eyes
+        tex.SetPixel(5, 11, eye); tex.SetPixel(6, 11, eye);
+        tex.SetPixel(9, 11, eye); tex.SetPixel(10, 11, eye);
+
+        // Fangs
+        tex.SetPixel(6, 5, fang);
+        tex.SetPixel(9, 5, fang);
+        tex.SetPixel(6, 4, fang);
+        tex.SetPixel(9, 4, fang);
+
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
     }
