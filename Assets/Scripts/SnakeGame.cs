@@ -617,6 +617,8 @@ public class SnakeGame : MonoBehaviour
 #if UNITY_EDITOR
         Debug.Log("Game Over. Press R to restart.");
 #endif
+        // Immediately stop any playing soundtrack on defeat
+        MusicManager.Instance?.StopImmediate();
         ShowGameOverUI();
     }
 
@@ -702,7 +704,12 @@ public class SnakeGame : MonoBehaviour
             EnsureAudio();
             if (audioSource == null) return;
         }
-        audioSource.PlayOneShot(clip, Mathf.Clamp01(volume) * sfxVolume);
+        float sfxLevel = 1f;
+        if (SettingsManager.Instance != null)
+        {
+            sfxLevel = Mathf.Clamp01(SettingsManager.Instance.SfxVolume);
+        }
+        audioSource.PlayOneShot(clip, Mathf.Clamp01(volume) * sfxVolume * sfxLevel);
     }
 
     private enum Waveform
@@ -2427,6 +2434,8 @@ public class SnakeGame : MonoBehaviour
     {
         isCountingDown = true;
         countdownTimer = Mathf.Max(0f, seconds);
+        // Ensure soundtrack is not playing during pre-start countdown
+        MusicManager.Instance?.StopImmediate();
         if (countdownOverlayGO != null)
         {
             countdownOverlayGO.SetActive(true);
@@ -2448,6 +2457,8 @@ public class SnakeGame : MonoBehaviour
         {
             isCountingDown = false;
             if (countdownOverlayGO != null) countdownOverlayGO.SetActive(false);
+            // Start gameplay soundtrack right as the game begins
+            MusicManager.Instance?.StartGameplayMusic();
         }
     }
 }
