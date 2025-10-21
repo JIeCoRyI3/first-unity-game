@@ -11,9 +11,6 @@ TextureImporter:
   - first:
       213: -6836848333647064752
     second: snake-body_2
-  - first:
-      213: -9213254941326658703
-    second: snake-body_3
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -149,7 +146,7 @@ TextureImporter:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 258
+        width: 514
         height: 259
       alignment: 0
       pivot: {x: 0, y: 0}
@@ -187,28 +184,6 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
-    - serializedVersion: 2
-      name: snake-body_3
-      rect:
-        serializedVersion: 2
-        x: 257
-        y: 0
-        width: 257
-        height: 259
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 173bc1dd171f32080800000000000000
-      internalID: -9213254941326658703
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
     outline: []
     customData: 
     physicsShape: []
@@ -226,7 +201,6 @@ TextureImporter:
       snake-body_0: 5697656675890935949
       snake-body_1: 7943422614057638116
       snake-body_2: -6836848333647064752
-      snake-body_3: -9213254941326658703
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
