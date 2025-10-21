@@ -76,7 +76,8 @@ public class MenuController : MonoBehaviour
         var title = titleGO.AddComponent<Text>();
         title.text = "SNAKE";
         title.font = PixelFontProvider.Get();
-        title.fontSize = 56;
+        title.fontSize = 84;
+        title.fontStyle = FontStyle.Bold;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.92f, 0.96f, 1f, 1f);
         var titleLE = titleGO.AddComponent<LayoutElement>();
@@ -111,14 +112,15 @@ public class MenuController : MonoBehaviour
         btn.colors = colors;
 
         var rt = btnGO.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(280, 64);
+        rt.sizeDelta = new Vector2(320, 80);
 
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(btnGO.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = text;
         t.font = PixelFontProvider.Get();
-        t.fontSize = 28;
+        t.fontSize = 42;
+        t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 0.9f, 1f);
         var textRT = t.GetComponent<RectTransform>();

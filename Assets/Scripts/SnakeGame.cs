@@ -1136,7 +1136,8 @@ public class SnakeGame : MonoBehaviour
         textGO.transform.SetParent(barGO.transform, false);
         var text = textGO.AddComponent<Text>();
         text.font = PixelFontProvider.Get();
-        text.fontSize = 20;
+        text.fontSize = 24;
+        text.fontStyle = FontStyle.Bold;
         text.alignment = TextAnchor.MiddleCenter;
         text.color = new Color(0.95f, 0.97f, 1f, 1f);
         var textRT = textGO.GetComponent<RectTransform>();
@@ -1199,11 +1200,12 @@ public class SnakeGame : MonoBehaviour
         var title = titleGO.AddComponent<Text>();
         title.text = "Level up! Choose an upgrade";
         title.font = PixelFontProvider.Get();
-        title.fontSize = 28;
+        title.fontSize = 32;
+        title.fontStyle = FontStyle.Bold;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.95f, 0.97f, 1f, 1f);
         var titleLE = titleGO.AddComponent<LayoutElement>();
-        titleLE.minHeight = 56f;
+        titleLE.minHeight = 72f;
 
         var buttons = new List<Button>();
         Button b1 = CreateUIButton(dialog.transform, "+1 food on field");
@@ -1413,11 +1415,12 @@ public class SnakeGame : MonoBehaviour
         var title = titleGO.AddComponent<Text>();
         title.text = "Game Over";
         title.font = PixelFontProvider.Get();
-        title.fontSize = 36;
+        title.fontSize = 44;
+        title.fontStyle = FontStyle.Bold;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.95f, 0.97f, 1f, 1f);
         var titleLE = titleGO.AddComponent<LayoutElement>();
-        titleLE.minHeight = 64f;
+        titleLE.minHeight = 84f;
 
         Button restartBtn = CreateUIButton(dialog.transform, "Restart");
         restartBtn.onClick.AddListener(() => { HideGameOverUI(); StartNewGame(); });
@@ -1441,14 +1444,15 @@ public class SnakeGame : MonoBehaviour
         btn.colors = colors;
 
         var rt = go.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(300, 60);
+        rt.sizeDelta = new Vector2(300, 68);
 
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(go.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = label;
         t.font = PixelFontProvider.Get();
-        t.fontSize = 28;
+        t.fontSize = 32;
+        t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 1f, 1f);
         var textRT = t.GetComponent<RectTransform>();

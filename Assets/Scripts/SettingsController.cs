@@ -100,7 +100,8 @@ public class SettingsController : MonoBehaviour
         var title = titleGO.AddComponent<Text>();
         title.text = "SETTINGS";
         title.font = PixelFontProvider.Get();
-        title.fontSize = 46;
+        title.fontSize = 72;
+        title.fontStyle = FontStyle.Bold;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.92f, 0.96f, 1f, 1f);
         var titleLE = titleGO.AddComponent<LayoutElement>();
@@ -174,7 +175,8 @@ public class SettingsController : MonoBehaviour
         labelGO.transform.SetParent(group.transform, false);
         var label = labelGO.AddComponent<Text>();
         label.font = PixelFontProvider.Get();
-        label.fontSize = 24;
+        label.fontSize = 36;
+        label.fontStyle = FontStyle.Bold;
         label.alignment = TextAnchor.MiddleCenter;
         label.color = new Color(0.9f, 0.95f, 1f, 1f);
 
@@ -308,7 +310,8 @@ public class SettingsController : MonoBehaviour
         var t = textGO.AddComponent<Text>();
         t.text = text;
         t.font = PixelFontProvider.Get();
-        t.fontSize = 28;
+        t.fontSize = 42;
+        t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 0.9f, 1f);
         var textRT = t.GetComponent<RectTransform>();
@@ -338,7 +341,8 @@ public class SettingsController : MonoBehaviour
         var labelText = labelGO.AddComponent<Text>();
         labelText.text = label;
         labelText.font = PixelFontProvider.Get();
-        labelText.fontSize = 24;
+        labelText.fontSize = 32;
+        labelText.fontStyle = FontStyle.Bold;
         labelText.alignment = TextAnchor.MiddleCenter;
         labelText.color = new Color(0.9f, 0.95f, 1f, 1f);
         var labelLE = labelGO.AddComponent<LayoutElement>();
