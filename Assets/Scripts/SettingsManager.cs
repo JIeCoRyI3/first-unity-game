@@ -8,8 +8,9 @@ public class SettingsManager : MonoBehaviour
     public static SettingsManager Instance { get; private set; }
 
     public float SoundVolume { get; private set; } = 0.8f;           // 0..1
-    public float BrightnessEV100 { get; private set; } = 0.0f;       // -2..+2 typical
-    public float Contrast { get; private set; } = 0.0f;              // -100..+100
+    // New percent-based controls (0..100). 50% equals neutral defaults
+    public float BrightnessPercent { get; private set; } = 50f;      // 0..100
+    public float ContrastPercent  { get; private set; } = 50f;       // 0..100
 
     private Volume globalVolume;
     private VolumeProfile globalProfile;
@@ -80,7 +81,7 @@ public class SettingsManager : MonoBehaviour
             colorAdjustments = globalProfile.Add<ColorAdjustments>(true);
             colorAdjustments.postExposure.overrideState = true;
             colorAdjustments.contrast.overrideState = true;
-            colorAdjustments.saturation.overrideState = false;
+            colorAdjustments.saturation.overrideState = true;
             colorAdjustments.colorFilter.overrideState = false;
             colorAdjustments.hueShift.overrideState = false;
         }
@@ -103,8 +104,8 @@ public class SettingsManager : MonoBehaviour
     private void ApplyAllSettings()
     {
         ApplySoundVolume(SoundVolume);
-        ApplyBrightness(BrightnessEV100);
-        ApplyContrast(Contrast);
+        ApplyBrightnessPercent(BrightnessPercent);
+        ApplyContrastPercent(ContrastPercent);
     }
 
     public void SetSoundVolume(float value)
@@ -113,16 +114,16 @@ public class SettingsManager : MonoBehaviour
         ApplySoundVolume(SoundVolume);
     }
 
-    public void SetBrightness(float ev100)
+    public void SetBrightnessPercent(float percent)
     {
-        BrightnessEV100 = Mathf.Clamp(ev100, -2f, 2f);
-        ApplyBrightness(BrightnessEV100);
+        BrightnessPercent = Mathf.Clamp(percent, 0f, 100f);
+        ApplyBrightnessPercent(BrightnessPercent);
     }
 
-    public void SetContrast(float contrast)
+    public void SetContrastPercent(float percent)
     {
-        Contrast = Mathf.Clamp(contrast, -100f, 100f);
-        ApplyContrast(Contrast);
+        ContrastPercent = Mathf.Clamp(percent, 0f, 100f);
+        ApplyContrastPercent(ContrastPercent);
     }
 
     private static void ApplySoundVolume(float volume)
@@ -130,21 +131,28 @@ public class SettingsManager : MonoBehaviour
         AudioListener.volume = Mathf.Clamp01(volume);
     }
 
-    private void ApplyBrightness(float ev100)
+    private void ApplyBrightnessPercent(float percent)
     {
         if (colorAdjustments == null) EnsureGlobalPostFX();
         if (colorAdjustments != null)
         {
-            colorAdjustments.postExposure.value = ev100;
+            // Map 0..100% -> EV range [-4..+4], 50% => 0 EV (neutral)
+            float ev = Mathf.Lerp(-4f, 4f, Mathf.Clamp01(percent / 100f));
+            colorAdjustments.postExposure.value = ev;
         }
     }
 
-    private void ApplyContrast(float contrast)
+    private void ApplyContrastPercent(float percent)
     {
         if (colorAdjustments == null) EnsureGlobalPostFX();
         if (colorAdjustments != null)
         {
-            colorAdjustments.contrast.value = contrast;
+            // Interpret "контраст" as perceived color intensity:
+            // 0% => grayscale, 50% => normal, 100% => very saturated
+            float saturation = Mathf.Lerp(-100f, 100f, Mathf.Clamp01(percent / 100f));
+            colorAdjustments.saturation.value = saturation;
+            // Optionally bias contrast slightly with saturation for more impact
+            colorAdjustments.contrast.value = Mathf.Lerp(-10f, 10f, Mathf.Clamp01(percent / 100f));
         }
     }
 }

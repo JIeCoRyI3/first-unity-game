@@ -92,22 +92,23 @@ public class SettingsController : MonoBehaviour
 
         // Sliders
         float soundInit = SettingsManager.Instance != null ? SettingsManager.Instance.SoundVolume : 0.8f;
-        float brightInit = SettingsManager.Instance != null ? SettingsManager.Instance.BrightnessEV100 : 0f; // -2..2
-        float contrastInit = SettingsManager.Instance != null ? SettingsManager.Instance.Contrast : 0f; // -100..100
+        float brightInit = SettingsManager.Instance != null ? SettingsManager.Instance.BrightnessPercent : 50f; // 0..100
+        float contrastInit = SettingsManager.Instance != null ? SettingsManager.Instance.ContrastPercent : 50f; // 0..100
 
         // Volume slider snapping to 10% steps with percent label
         CreatePercentVolumeSlider(panelGO.transform, soundInit);
 
-        // Brightness: map -2..2 EV
-        CreateLabeledSlider(panelGO.transform, "Яркость", -2f, 2f, brightInit, (ev) => {
-            SettingsManager.Instance?.SetBrightness(ev);
+        // Brightness 0..100%
+        CreateLabeledSlider(panelGO.transform, "Яркость", 0f, 100f, brightInit, (val) => {
+            SettingsManager.Instance?.SetBrightnessPercent(val);
         });
-        AddSnakePreview(panelGO.transform);
 
-        // Contrast: -100..100
-        CreateLabeledSlider(panelGO.transform, "Контраст", -100f, 100f, contrastInit, (c) => {
-            SettingsManager.Instance?.SetContrast(c);
+        // Contrast 0..100%
+        CreateLabeledSlider(panelGO.transform, "Контраст", 0f, 100f, contrastInit, (val) => {
+            SettingsManager.Instance?.SetContrastPercent(val);
         });
+
+        // Single snake preview below all sliders
         AddSnakePreview(panelGO.transform);
 
         // Back button
@@ -230,7 +231,7 @@ public class SettingsController : MonoBehaviour
         slider.direction = Slider.Direction.LeftToRight;
 
         // Percent snapping to predefined checkpoints only
-        int[] checkpoints = new int[] {10,20,30,40,50,60,70,80,90,100};
+        int[] checkpoints = new int[] {0,10,20,30,40,50,60,70,80,90,100};
         int SnapToCheckpoint(int val)
         {
             int best = checkpoints[0];
