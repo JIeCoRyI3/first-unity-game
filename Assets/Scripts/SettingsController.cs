@@ -108,12 +108,22 @@ public class SettingsController : MonoBehaviour
         titleLE.minHeight = 72f;
 
         // Sliders
-        float soundInit = SettingsManager.Instance != null ? SettingsManager.Instance.SoundVolume : 0.8f;
-        float brightInit = SettingsManager.Instance != null ? SettingsManager.Instance.BrightnessPercent : 50f; // 0..100
+        float masterInit  = SettingsManager.Instance != null ? SettingsManager.Instance.MasterVolume : 1.0f;
+        float sfxInit     = SettingsManager.Instance != null ? SettingsManager.Instance.SfxVolume : 1.0f;
+        float musicInit   = SettingsManager.Instance != null ? SettingsManager.Instance.MusicVolume : 0.7f;
+        float brightInit  = SettingsManager.Instance != null ? SettingsManager.Instance.BrightnessPercent : 50f; // 0..100
         float contrastInit = SettingsManager.Instance != null ? SettingsManager.Instance.ContrastPercent : 50f; // 0..100
 
-        // Volume slider snapping to 10% steps with percent label
-        CreatePercentVolumeSlider(panelGO.transform, soundInit);
+        // Volume sliders (with 10% snapping)
+        CreatePercentSlider(panelGO.transform, "Master", masterInit, (v01) => {
+            SettingsManager.Instance?.SetMasterVolume(v01);
+        });
+        CreatePercentSlider(panelGO.transform, "SFX", sfxInit, (v01) => {
+            SettingsManager.Instance?.SetSfxVolume(v01);
+        });
+        CreatePercentSlider(panelGO.transform, "Music", musicInit, (v01) => {
+            SettingsManager.Instance?.SetMusicVolume(v01);
+        });
 
         // Brightness 0..100%
         CreateLabeledSlider(panelGO.transform, "Brightness", 0f, 100f, brightInit, (val) => {
@@ -270,6 +280,134 @@ public class SettingsController : MonoBehaviour
         {
             label.text = $"Sound: {valPercent}%";
             SettingsManager.Instance?.SetSoundVolume(valPercent / 100f);
+        }
+
+        // Initialize label
+        UpdateLabelAndApply(initialPercent);
+
+        // Enforce snapping and application on value changes
+        slider.onValueChanged.AddListener((val) => {
+            int intVal = Mathf.RoundToInt(val);
+            int snapped = SnapToCheckpoint(intVal);
+            if (snapped != intVal)
+            {
+                slider.SetValueWithoutNotify(snapped);
+            }
+            UpdateLabelAndApply(snapped);
+        });
+    }
+
+    private void CreatePercentSlider(Transform parent, string labelPrefix, float initial01, System.Action<float> onChanged)
+    {
+        // Container
+        var group = new GameObject(labelPrefix + "Group");
+        group.transform.SetParent(parent, false);
+        var v = group.AddComponent<VerticalLayoutGroup>();
+        v.childAlignment = TextAnchor.MiddleCenter;
+        v.spacing = 6f;
+        var le = group.AddComponent<LayoutElement>();
+        le.minHeight = 80f;
+        le.minWidth = 500f;
+
+        // Label with percent
+        var labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(group.transform, false);
+        var label = labelGO.AddComponent<Text>();
+        label.font = PixelFontProvider.Get();
+        label.fontSize = 36;
+        label.fontStyle = FontStyle.Bold;
+        label.alignment = TextAnchor.MiddleCenter;
+        label.color = new Color(0.9f, 0.95f, 1f, 1f);
+
+        // Slider root
+        var sliderGO = new GameObject("Slider");
+        sliderGO.transform.SetParent(group.transform, false);
+        var slider = sliderGO.AddComponent<Slider>();
+        slider.minValue = 0f;
+        slider.maxValue = 100f;
+        slider.wholeNumbers = true; // restrict to integer percent values
+        int initialPercent = Mathf.RoundToInt(Mathf.Clamp01(initial01) * 100f);
+        slider.value = initialPercent;
+
+        var srt = sliderGO.GetComponent<RectTransform>();
+        srt.sizeDelta = new Vector2(420, 20);
+
+        // Background
+        var bg = new GameObject("Background");
+        bg.transform.SetParent(sliderGO.transform, false);
+        var bgImg = bg.AddComponent<Image>();
+        bgImg.color = new Color(0.1f, 0.12f, 0.16f, 1f);
+        bgImg.sprite = GetUnitSprite();
+        var bgRT = bg.GetComponent<RectTransform>();
+        bgRT.anchorMin = new Vector2(0, 0.25f);
+        bgRT.anchorMax = new Vector2(1, 0.75f);
+        bgRT.offsetMin = Vector2.zero;
+        bgRT.offsetMax = Vector2.zero;
+
+        // Fill Area
+        var fillArea = new GameObject("Fill Area");
+        fillArea.transform.SetParent(sliderGO.transform, false);
+        var faRT = fillArea.AddComponent<RectTransform>();
+        faRT.anchorMin = new Vector2(0, 0.25f);
+        faRT.anchorMax = new Vector2(1, 0.75f);
+        faRT.offsetMin = new Vector2(6, 0);
+        faRT.offsetMax = new Vector2(-6, 0);
+
+        var fill = new GameObject("Fill");
+        fill.transform.SetParent(fillArea.transform, false);
+        var fillImg = fill.AddComponent<Image>();
+        fillImg.color = new Color(0.2f, 0.6f, 1.0f, 0.9f);
+        fillImg.sprite = GetUnitSprite();
+        var fillRT = fill.GetComponent<RectTransform>();
+        fillRT.anchorMin = new Vector2(0, 0);
+        fillRT.anchorMax = new Vector2(1, 1);
+        fillRT.offsetMin = Vector2.zero;
+        fillRT.offsetMax = Vector2.zero;
+
+        // Handle
+        var handleArea = new GameObject("Handle Slide Area");
+        handleArea.transform.SetParent(sliderGO.transform, false);
+        var haRT = handleArea.AddComponent<RectTransform>();
+        haRT.anchorMin = new Vector2(0, 0);
+        haRT.anchorMax = new Vector2(1, 1);
+        haRT.offsetMin = new Vector2(6, 0);
+        haRT.offsetMax = new Vector2(-6, 0);
+
+        var handle = new GameObject("Handle");
+        handle.transform.SetParent(handleArea.transform, false);
+        var handleImg = handle.AddComponent<Image>();
+        handleImg.color = new Color(0.9f, 0.95f, 1f, 1f);
+        handleImg.sprite = GetUnitSprite();
+        var handleRT = handle.GetComponent<RectTransform>();
+        handleRT.sizeDelta = new Vector2(12, 18);
+
+        // Wire slider refs
+        slider.fillRect = fillImg.rectTransform;
+        slider.targetGraphic = handleImg;
+        slider.handleRect = handleImg.rectTransform;
+        slider.direction = Slider.Direction.LeftToRight;
+
+        int[] checkpoints = new int[] {0,10,20,30,40,50,60,70,80,90,100};
+        int SnapToCheckpoint(int val)
+        {
+            int best = checkpoints[0];
+            int bestDist = Mathf.Abs(val - best);
+            for (int i = 1; i < checkpoints.Length; i++)
+            {
+                int d = Mathf.Abs(val - checkpoints[i]);
+                if (d < bestDist)
+                {
+                    bestDist = d;
+                    best = checkpoints[i];
+                }
+            }
+            return best;
+        }
+
+        void UpdateLabelAndApply(int valPercent)
+        {
+            label.text = $"{labelPrefix}: {valPercent}%";
+            onChanged?.Invoke(valPercent / 100f);
         }
 
         // Initialize label

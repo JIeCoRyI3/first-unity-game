@@ -704,7 +704,12 @@ public class SnakeGame : MonoBehaviour
             EnsureAudio();
             if (audioSource == null) return;
         }
-        audioSource.PlayOneShot(clip, Mathf.Clamp01(volume) * sfxVolume);
+        float sfxLevel = 1f;
+        if (SettingsManager.Instance != null)
+        {
+            sfxLevel = Mathf.Clamp01(SettingsManager.Instance.SfxVolume);
+        }
+        audioSource.PlayOneShot(clip, Mathf.Clamp01(volume) * sfxVolume * sfxLevel);
     }
 
     private enum Waveform

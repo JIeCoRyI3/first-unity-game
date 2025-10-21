@@ -16,6 +16,8 @@ public class MusicManager : MonoBehaviour
 
     private bool stopRequested;
     private int lastTrackIndex = -1;
+    // 0..1 factor set by fade in/out; actual source volume = normalized * SettingsManager.MusicVolume
+    private float normalizedVolume;
 
     private void Awake()
     {
@@ -28,6 +30,7 @@ public class MusicManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         EnsureAudioSource();
         LoadMusicClips();
+        normalizedVolume = 0f;
     }
 
     public void StartGameplayMusic()
@@ -60,7 +63,8 @@ public class MusicManager : MonoBehaviour
         {
             musicSource.Stop();
             musicSource.clip = null;
-            musicSource.volume = 0f;
+            normalizedVolume = 0f;
+            ApplyCurrentMusicVolume();
         }
     }
 
@@ -148,7 +152,8 @@ public class MusicManager : MonoBehaviour
     {
         EnsureAudioSource();
         musicSource.clip = clip;
-        musicSource.volume = 0f;
+        normalizedVolume = 0f;
+        ApplyCurrentMusicVolume();
         musicSource.Play();
 
         if (stopRequested) yield break;
@@ -170,6 +175,7 @@ public class MusicManager : MonoBehaviour
             {
                 break;
             }
+            ApplyCurrentMusicVolume();
             yield return null;
         }
 
@@ -181,6 +187,7 @@ public class MusicManager : MonoBehaviour
         // Let the clip finish naturally if still playing
         while (!stopRequested && musicSource.isPlaying)
         {
+            ApplyCurrentMusicVolume();
             yield return null;
         }
 
@@ -189,14 +196,15 @@ public class MusicManager : MonoBehaviour
         musicSource.volume = 0f;
     }
 
-    private IEnumerator FadeToVolume(float target01, float duration)
+    private IEnumerator FadeToVolume(float targetNormalized01, float duration)
     {
         if (duration <= 0f)
         {
-            musicSource.volume = Mathf.Clamp01(target01);
+            normalizedVolume = Mathf.Clamp01(targetNormalized01);
+            ApplyCurrentMusicVolume();
             yield break;
         }
-        float start = musicSource.volume;
+        float start = Mathf.Clamp01(normalizedVolume);
         float t = 0f;
         // Replace any existing fade coroutine reference with this one
         fadeCoroutine = StartCoroutine(FadeRoutine());
@@ -209,14 +217,26 @@ public class MusicManager : MonoBehaviour
             {
                 t += Time.deltaTime;
                 float u = Mathf.Clamp01(t / duration);
-                float v = Mathf.Lerp(start, Mathf.Clamp01(target01), u);
-                musicSource.volume = v;
+                normalizedVolume = Mathf.Lerp(start, Mathf.Clamp01(targetNormalized01), u);
+                ApplyCurrentMusicVolume();
                 yield return null;
             }
             if (!stopRequested)
             {
-                musicSource.volume = Mathf.Clamp01(target01);
+                normalizedVolume = Mathf.Clamp01(targetNormalized01);
+                ApplyCurrentMusicVolume();
             }
         }
+    }
+
+    private void ApplyCurrentMusicVolume()
+    {
+        if (musicSource == null) return;
+        float musicLevel = 0.7f;
+        if (SettingsManager.Instance != null)
+        {
+            musicLevel = Mathf.Clamp01(SettingsManager.Instance.MusicVolume);
+        }
+        musicSource.volume = Mathf.Clamp01(normalizedVolume) * musicLevel;
     }
 }

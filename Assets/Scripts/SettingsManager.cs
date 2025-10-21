@@ -7,7 +7,13 @@ public class SettingsManager : MonoBehaviour
 {
     public static SettingsManager Instance { get; private set; }
 
-    public float SoundVolume { get; private set; } = 0.8f;           // 0..1
+    // Master/SFX/Music volumes (0..1). Defaults: Master 1.0, SFX 1.0, Music 0.7
+    public float MasterVolume { get; private set; } = 1.0f;          // 0..1
+    public float SfxVolume    { get; private set; } = 1.0f;          // 0..1
+    public float MusicVolume  { get; private set; } = 0.7f;          // 0..1
+
+    [System.Obsolete("Use MasterVolume instead")]
+    public float SoundVolume { get => MasterVolume; private set { MasterVolume = value; } }
     // New percent-based controls (0..100). 50% equals neutral defaults
     public float BrightnessPercent { get; private set; } = 50f;      // 0..100
     public float ContrastPercent  { get; private set; } = 50f;       // 0..100
@@ -107,15 +113,29 @@ public class SettingsManager : MonoBehaviour
 
     private void ApplyAllSettings()
     {
-        ApplySoundVolume(SoundVolume);
+        ApplyMasterVolume(MasterVolume);
         ApplyBrightnessPercent(BrightnessPercent);
         ApplyContrastPercent(ContrastPercent);
     }
 
-    public void SetSoundVolume(float value)
+    public void SetSoundVolume(float value) { SetMasterVolume(value); }
+
+    public void SetMasterVolume(float value)
     {
-        SoundVolume = Mathf.Clamp01(value);
-        ApplySoundVolume(SoundVolume);
+        MasterVolume = Mathf.Clamp01(value);
+        ApplyMasterVolume(MasterVolume);
+    }
+
+    public void SetSfxVolume(float value)
+    {
+        SfxVolume = Mathf.Clamp01(value);
+        // No immediate engine-side apply needed; consumers read this each play
+    }
+
+    public void SetMusicVolume(float value)
+    {
+        MusicVolume = Mathf.Clamp01(value);
+        // MusicManager will read this continuously and adjust source volume
     }
 
     public void SetBrightnessPercent(float percent)
@@ -130,7 +150,7 @@ public class SettingsManager : MonoBehaviour
         ApplyContrastPercent(ContrastPercent);
     }
 
-    private static void ApplySoundVolume(float volume)
+    private static void ApplyMasterVolume(float volume)
     {
         AudioListener.volume = Mathf.Clamp01(volume);
     }
