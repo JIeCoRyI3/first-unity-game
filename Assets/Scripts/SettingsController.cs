@@ -99,8 +99,9 @@ public class SettingsController : MonoBehaviour
         titleGO.transform.SetParent(panelGO.transform, false);
         var title = titleGO.AddComponent<Text>();
         title.text = "SETTINGS";
-        title.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        title.fontSize = 46;
+        title.font = PixelFontProvider.Get();
+        title.fontSize = 72;
+        title.fontStyle = FontStyle.Bold;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.92f, 0.96f, 1f, 1f);
         var titleLE = titleGO.AddComponent<LayoutElement>();
@@ -115,12 +116,12 @@ public class SettingsController : MonoBehaviour
         CreatePercentVolumeSlider(panelGO.transform, soundInit);
 
         // Brightness 0..100%
-        CreateLabeledSlider(panelGO.transform, "Яркость", 0f, 100f, brightInit, (val) => {
+        CreateLabeledSlider(panelGO.transform, "Brightness", 0f, 100f, brightInit, (val) => {
             SettingsManager.Instance?.SetBrightnessPercent(val);
         });
 
         // Contrast 0..100%
-        CreateLabeledSlider(panelGO.transform, "Контраст", 0f, 100f, contrastInit, (val) => {
+        CreateLabeledSlider(panelGO.transform, "Contrast", 0f, 100f, contrastInit, (val) => {
             SettingsManager.Instance?.SetContrastPercent(val);
         });
 
@@ -128,7 +129,7 @@ public class SettingsController : MonoBehaviour
         AddSnakePreview(panelGO.transform);
 
         // Back button
-        var backBtn = CreateButton(panelGO.transform, "Назад");
+        var backBtn = CreateButton(panelGO.transform, "Back");
         backBtn.onClick.AddListener(() => SceneManager.LoadScene("Menu"));
     }
 
@@ -160,7 +161,7 @@ public class SettingsController : MonoBehaviour
     private void CreatePercentVolumeSlider(Transform parent, float initial01)
     {
         // Container
-        var group = new GameObject("ЗвукGroup");
+        var group = new GameObject("SoundGroup");
         group.transform.SetParent(parent, false);
         var v = group.AddComponent<VerticalLayoutGroup>();
         v.childAlignment = TextAnchor.MiddleCenter;
@@ -173,8 +174,9 @@ public class SettingsController : MonoBehaviour
         var labelGO = new GameObject("Label");
         labelGO.transform.SetParent(group.transform, false);
         var label = labelGO.AddComponent<Text>();
-        label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        label.fontSize = 24;
+        label.font = PixelFontProvider.Get();
+        label.fontSize = 36;
+        label.fontStyle = FontStyle.Bold;
         label.alignment = TextAnchor.MiddleCenter;
         label.color = new Color(0.9f, 0.95f, 1f, 1f);
 
@@ -266,7 +268,7 @@ public class SettingsController : MonoBehaviour
 
         void UpdateLabelAndApply(int valPercent)
         {
-            label.text = $"Звук: {valPercent}%";
+            label.text = $"Sound: {valPercent}%";
             SettingsManager.Instance?.SetSoundVolume(valPercent / 100f);
         }
 
@@ -307,8 +309,9 @@ public class SettingsController : MonoBehaviour
         textGO.transform.SetParent(btnGO.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = text;
-        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        t.fontSize = 28;
+        t.font = PixelFontProvider.Get();
+        t.fontSize = 42;
+        t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 0.9f, 1f);
         var textRT = t.GetComponent<RectTransform>();
@@ -337,8 +340,9 @@ public class SettingsController : MonoBehaviour
         labelGO.transform.SetParent(group.transform, false);
         var labelText = labelGO.AddComponent<Text>();
         labelText.text = label;
-        labelText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        labelText.fontSize = 24;
+        labelText.font = PixelFontProvider.Get();
+        labelText.fontSize = 32;
+        labelText.fontStyle = FontStyle.Bold;
         labelText.alignment = TextAnchor.MiddleCenter;
         labelText.color = new Color(0.9f, 0.95f, 1f, 1f);
         var labelLE = labelGO.AddComponent<LayoutElement>();
