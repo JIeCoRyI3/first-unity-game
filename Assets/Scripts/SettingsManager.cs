@@ -7,10 +7,10 @@ public class SettingsManager : MonoBehaviour
 {
     public static SettingsManager Instance { get; private set; }
 
-    // Master/SFX/Music volumes (0..1). Defaults: Master 1.0, SFX 1.0, Music 0.7
+    // Master/SFX/Music volumes (0..1). Defaults: Master 1.0, SFX 1.0, Music 0.5
     public float MasterVolume { get; private set; } = 1.0f;          // 0..1
     public float SfxVolume    { get; private set; } = 1.0f;          // 0..1
-    public float MusicVolume  { get; private set; } = 0.7f;          // 0..1
+    public float MusicVolume  { get; private set; } = 0.5f;          // 0..1
 
     [System.Obsolete("Use MasterVolume instead")]
     public float SoundVolume { get => MasterVolume; private set { MasterVolume = value; } }

@@ -232,7 +232,7 @@ public class MusicManager : MonoBehaviour
     private void ApplyCurrentMusicVolume()
     {
         if (musicSource == null) return;
-        float musicLevel = 0.7f;
+        float musicLevel = 0.5f;
         if (SettingsManager.Instance != null)
         {
             musicLevel = Mathf.Clamp01(SettingsManager.Instance.MusicVolume);

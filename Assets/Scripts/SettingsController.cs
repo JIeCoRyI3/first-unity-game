@@ -110,7 +110,7 @@ public class SettingsController : MonoBehaviour
         // Sliders
         float masterInit  = SettingsManager.Instance != null ? SettingsManager.Instance.MasterVolume : 1.0f;
         float sfxInit     = SettingsManager.Instance != null ? SettingsManager.Instance.SfxVolume : 1.0f;
-        float musicInit   = SettingsManager.Instance != null ? SettingsManager.Instance.MusicVolume : 0.7f;
+        float musicInit   = SettingsManager.Instance != null ? SettingsManager.Instance.MusicVolume : 0.5f;
         float brightInit  = SettingsManager.Instance != null ? SettingsManager.Instance.BrightnessPercent : 50f; // 0..100
         float contrastInit = SettingsManager.Instance != null ? SettingsManager.Instance.ContrastPercent : 50f; // 0..100
 
