@@ -34,8 +34,23 @@ public class MenuController : MonoBehaviour
         // Canvas
         var canvasGO = new GameObject("Canvas");
         var canvas = canvasGO.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvasGO.AddComponent<CanvasScaler>();
+        // World Space canvas so post-processing affects UI
+        canvas.renderMode = RenderMode.WorldSpace;
+        var cam = Camera.main;
+        var canvasScaler = canvasGO.AddComponent<CanvasScaler>();
+        canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvasScaler.referenceResolution = new Vector2(1280, 720);
+        var crt = canvasGO.GetComponent<RectTransform>();
+        // Set rect in pixels; scale canvas so 100 px = 1 world unit
+        crt.sizeDelta = canvasScaler.referenceResolution;
+        if (cam != null)
+        {
+            canvas.worldCamera = cam; // needed for UI raycasts in world space
+            canvas.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 0f);
+        }
+        canvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = 1000;
         canvasGO.AddComponent<GraphicRaycaster>();
 
         // Background Panel
@@ -70,6 +85,10 @@ public class MenuController : MonoBehaviour
         // Play button
         var playBtn = CreateButton(panelGO.transform, "Играть");
         playBtn.onClick.AddListener(() => SceneManager.LoadScene("Snake"));
+
+        // Settings button
+        var settingsBtn = CreateButton(panelGO.transform, "Настройки");
+        settingsBtn.onClick.AddListener(() => SceneManager.LoadScene("Settings"));
 
         // Quit button
         var quitBtn = CreateButton(panelGO.transform, "Выход");

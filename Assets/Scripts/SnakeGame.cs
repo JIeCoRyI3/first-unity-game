@@ -1069,14 +1069,22 @@ public class SnakeGame : MonoBehaviour
         var titleLE = titleGO.AddComponent<LayoutElement>();
         titleLE.minHeight = 56f;
 
+        var buttons = new List<Button>();
         Button b1 = CreateUIButton(dialog.transform, "+1 еда на поле");
         b1.onClick.AddListener(() => { ApplyUpgradeExtraFood(); });
+        buttons.Add(b1);
 
         Button b2 = CreateUIButton(dialog.transform, "Увеличить поле на +1×+1");
         b2.onClick.AddListener(() => { ApplyUpgradeExpandGrid(); });
+        buttons.Add(b2);
 
         Button b3 = CreateUIButton(dialog.transform, "Замедлить время на 5%");
         b3.onClick.AddListener(() => { ApplyUpgradeSlowTime(); });
+        buttons.Add(b3);
+
+        // Keyboard navigation: Up/Down to change selection, Enter to confirm
+        var nav = dialog.AddComponent<LevelUpController>();
+        nav.Initialize(buttons);
     }
 
     private void HideLevelUpUI()
