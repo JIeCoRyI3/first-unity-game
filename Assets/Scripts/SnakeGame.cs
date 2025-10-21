@@ -218,18 +218,36 @@ public class SnakeGame : MonoBehaviour
 
     private void LoadSnakeSpriteSheets()
     {
-        // Body: expected base orientation left -> right
+        // Prefer slicing ourselves by grid to ensure correct 6x6 (body) and 2x2 (head)
         if (bodyFrames == null)
         {
-            bodyFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-body-spritesheet");
-            if (bodyFrames != null && bodyFrames.Length == 0) bodyFrames = null;
+            var bodyTex = Resources.Load<Texture2D>("SnakeSprites/snake-body-spritesheet");
+            if (bodyTex != null)
+            {
+                bodyTex.filterMode = FilterMode.Point;
+                bodyFrames = SliceSpriteSheet(bodyTex, 6, 6);
+            }
+            // Fallback to importer-sliced sprites if runtime slicing failed
+            if (bodyFrames == null || bodyFrames.Length == 0)
+            {
+                bodyFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-body-spritesheet");
+                if (bodyFrames != null && bodyFrames.Length == 0) bodyFrames = null;
+            }
         }
 
-        // Head: expected base orientation top -> bottom (facing down)
         if (headFrames == null)
         {
-            headFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-head");
-            if (headFrames != null && headFrames.Length == 0) headFrames = null;
+            var headTex = Resources.Load<Texture2D>("SnakeSprites/snake-head");
+            if (headTex != null)
+            {
+                headTex.filterMode = FilterMode.Point;
+                headFrames = SliceSpriteSheet(headTex, 2, 2);
+            }
+            if (headFrames == null || headFrames.Length == 0)
+            {
+                headFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-head");
+                if (headFrames != null && headFrames.Length == 0) headFrames = null;
+            }
         }
 
         // Fallback single-color sprite if sheets are not present
@@ -860,23 +878,26 @@ public class SnakeGame : MonoBehaviour
     private void ApplySpriteUniformScale(Transform t, Sprite s)
     {
         if (t == null || s == null) return;
-        float width = s.bounds.size.x;
-        if (width <= 0f)
+        // Fit sprite within 1x1 cell preserving aspect: scale by max dimension
+        Vector2 size = s.bounds.size;
+        float maxDim = Mathf.Max(size.x, size.y);
+        if (maxDim <= 0f)
         {
             t.localScale = Vector3.one;
             return;
         }
-        float k = 1f / width;
+        float k = 1f / maxDim;
         t.localScale = new Vector3(k, k, 1f);
     }
 
     // Head base orientation: facing Down (top -> bottom). Map to desired direction.
     private float GetZRotationForHead(Vector2Int dir)
     {
+        // Base frame faces Down; swap left/right mapping per user report
         if (dir == Vector2Int.up) return 180f;
-        if (dir == Vector2Int.right) return -90f;
+        if (dir == Vector2Int.right) return 90f;    // was -90 (incorrect)
         if (dir == Vector2Int.down) return 0f;
-        if (dir == Vector2Int.left) return 90f;
+        if (dir == Vector2Int.left) return -90f;    // was 90 (incorrect)
         return 0f;
     }
 
@@ -1266,6 +1287,32 @@ public class SnakeGame : MonoBehaviour
         }
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
+    }
+
+    private Sprite[] SliceSpriteSheet(Texture2D texture, int columns, int rows)
+    {
+        if (texture == null || columns <= 0 || rows <= 0) return null;
+        int texW = texture.width;
+        int texH = texture.height;
+        int cellW = texW / columns;
+        int cellH = texH / rows;
+        if (cellW <= 0 || cellH <= 0) return null;
+
+        var sprites = new List<Sprite>(columns * rows);
+        // Unity's texture origin is bottom-left; user described head base oriented top->bottom
+        // We iterate rows from top to bottom to match expected order visually
+        for (int row = rows - 1; row >= 0; row--)
+        {
+            for (int col = 0; col < columns; col++)
+            {
+                int x = col * cellW;
+                int y = row * cellH;
+                var rect = new Rect(x, y, cellW, cellH);
+                var sp = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), cellW, 0, SpriteMeshType.FullRect);
+                sprites.Add(sp);
+            }
+        }
+        return sprites.ToArray();
     }
 
     private Sprite[] GenerateFoodSprites()
