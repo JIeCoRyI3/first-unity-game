@@ -65,6 +65,8 @@ public class SnakeGame : MonoBehaviour
     private GameObject foodObject; // legacy (unused in multi-food mode)
     private List<Vector2Int> foodCells;
     private List<GameObject> foodObjects;
+    private List<GameObject> foodArrowContainers;
+    private List<int> foodTargetEnemyIndex;
     private int maxFoodCount = 1;
     private Sprite cellSprite;
     private Sprite snakeSprite;
@@ -159,6 +161,9 @@ public class SnakeGame : MonoBehaviour
         UpdateEngagementDamage(dt);
         totalPlayTimeSeconds += dt;
         UpdateTimersHud();
+        // Enemy food influence and eating checks tick each second
+        UpdateEnemyFoodAttraction(dt);
+        UpdateEnemyEating(dt);
 
         moveTimer += dt;
         if (moveTimer >= moveIntervalSeconds)
@@ -795,6 +800,34 @@ public class SnakeGame : MonoBehaviour
                 obj.transform.position = new Vector3(pos.x, pos.y, 0f);
                 // Base scale reset; animated every Update
                 obj.transform.localScale = Vector3.one;
+                // Update arrow towards target enemy if any
+                if (foodArrowContainers != null && i < foodArrowContainers.Count)
+                {
+                    var arrow = foodArrowContainers[i];
+                    if (arrow != null)
+                    {
+                        int targetIdx = (foodTargetEnemyIndex != null && i < foodTargetEnemyIndex.Count) ? foodTargetEnemyIndex[i] : -1;
+                        if (targetIdx >= 0 && enemyCells != null && targetIdx < enemyCells.Count)
+                        {
+                            arrow.SetActive(true);
+                            var enemyPos = enemyCells[targetIdx];
+                            Vector2 worldFrom = new Vector2(pos.x + 0.5f, pos.y + 0.5f);
+                            Vector2 worldTo = new Vector2(enemyPos.x + 0.5f, enemyPos.y + 0.5f);
+                            Vector2 dir = (worldTo - worldFrom);
+                            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f; // our sprite points up
+                            arrow.transform.position = new Vector3(worldFrom.x, worldFrom.y, 0f);
+                            arrow.transform.rotation = Quaternion.Euler(0f, 0f, angle);
+                            // scale length to distance
+                            float len = Mathf.Clamp(dir.magnitude, 0.5f, 3.0f);
+                            // sprite pixels per unit equals height (h) in GenerateDottedArrowSprite()
+                            arrow.transform.localScale = new Vector3(1f, len, 1f);
+                        }
+                        else
+                        {
+                            arrow.SetActive(false);
+                        }
+                    }
+                }
             }
         }
     }
@@ -803,6 +836,8 @@ public class SnakeGame : MonoBehaviour
     {
         if (foodCells == null) foodCells = new List<Vector2Int>();
         if (foodObjects == null) foodObjects = new List<GameObject>();
+        if (foodArrowContainers == null) foodArrowContainers = new List<GameObject>();
+        if (foodTargetEnemyIndex == null) foodTargetEnemyIndex = new List<int>();
     }
 
     private void UpdateSnakePulse(float timeNow)
@@ -856,6 +891,17 @@ public class SnakeGame : MonoBehaviour
         {
             var go = CreateCellGO("Food", Color.white, cellSprite);
             foodObjects.Add(go);
+            // Create arrow container for this food
+            if (foodArrowContainers == null) foodArrowContainers = new List<GameObject>();
+            var arrow = new GameObject("FoodArrow");
+            arrow.transform.SetParent(renderContainer, false);
+            var sr = arrow.AddComponent<SpriteRenderer>();
+            sr.sprite = GenerateDottedArrowSprite();
+            sr.color = new Color(1f, 1f, 1f, 0.6f);
+            sr.sortingOrder = -1; // behind food and snake
+            foodArrowContainers.Add(arrow);
+            if (foodTargetEnemyIndex == null) foodTargetEnemyIndex = new List<int>();
+            foodTargetEnemyIndex.Add(-1);
         }
     }
 
@@ -1218,6 +1264,187 @@ public class SnakeGame : MonoBehaviour
         }
     }
 
+    // ================= Food attraction to enemies & enemy eating =================
+    private float foodAttractTimer;
+    private float enemyEatTimer;
+
+    private void UpdateEnemyFoodAttraction(float dt)
+    {
+        if (enemyCells == null || enemyCells.Count == 0) return;
+        if (foodCells == null || foodCells.Count == 0) return;
+        foodAttractTimer += dt;
+        if (foodAttractTimer < 1f) return;
+        foodAttractTimer -= 1f;
+
+        // Recompute targets (one enemy per food if ties pick one randomly)
+        EnsureFoodContainers();
+        while (foodTargetEnemyIndex.Count < foodCells.Count) foodTargetEnemyIndex.Add(-1);
+        for (int i = 0; i < foodCells.Count; i++)
+        {
+            var fc = foodCells[i];
+            // if already adjacent (radius 1), don't move by attraction (eating handles it)
+            int bestIdx = -1;
+            float bestDist = 9999f;
+            int equalCount = 0;
+            for (int e = 0; e < enemyCells.Count; e++)
+            {
+                float d = Vector2Int.Distance(fc, enemyCells[e]);
+                if (d < bestDist - 0.001f)
+                {
+                    bestDist = d;
+                    bestIdx = e;
+                    equalCount = 1;
+                }
+                else if (Mathf.Abs(d - bestDist) <= 0.001f)
+                {
+                    // equal distance -> choose randomly among equals
+                    equalCount++;
+                    if (Random.Range(0, equalCount) == 0)
+                    {
+                        bestIdx = e;
+                    }
+                }
+            }
+            foodTargetEnemyIndex[i] = bestIdx;
+        }
+
+        // Move foods within radius 2 by one cell closer, avoiding collisions with snake, foods, enemies
+        // Prepare occupied set for foods to avoid duplicate positions
+        var occupied = new HashSet<Vector2Int>(snakeCellSet);
+        if (foodCells != null)
+        {
+            for (int k = 0; k < foodCells.Count; k++) occupied.Add(foodCells[k]);
+        }
+        if (enemyCells != null)
+        {
+            for (int k = 0; k < enemyCells.Count; k++) occupied.Add(enemyCells[k]);
+        }
+
+        for (int i = 0; i < foodCells.Count; i++)
+        {
+            int target = (i < foodTargetEnemyIndex.Count) ? foodTargetEnemyIndex[i] : -1;
+            if (target < 0 || target >= enemyCells.Count) continue;
+            var fc = foodCells[i];
+            var ec = enemyCells[target];
+            float dist = Vector2Int.Distance(fc, ec);
+            if (dist > 2.0001f) continue; // outside radius 2
+            if (dist <= 1.0001f) continue; // already adjacent
+
+            // Preferred direction towards enemy
+            Vector2Int delta = new Vector2Int(Mathf.Clamp(ec.x - fc.x, -1, 1), Mathf.Clamp(ec.y - fc.y, -1, 1));
+            if (delta == Vector2Int.zero) continue;
+
+            // Candidate moves: primary, then neighboring cells that still reduce distance
+            var candidates = new List<Vector2Int>();
+            candidates.Add(fc + delta);
+            // Orthogonal alternatives
+            if (delta.x != 0) candidates.Add(fc + new Vector2Int(delta.x, 0));
+            if (delta.y != 0) candidates.Add(fc + new Vector2Int(0, delta.y));
+            // Diagonal alternatives
+            if (delta.x != 0 && delta.y != 0)
+            {
+                candidates.Add(fc + new Vector2Int(delta.x, -delta.y));
+                candidates.Add(fc + new Vector2Int(-delta.x, delta.y));
+            }
+
+            // Shuffle candidates to avoid directional bias
+            for (int c = 0; c < candidates.Count; c++)
+            {
+                int r = Random.Range(c, candidates.Count);
+                (candidates[c], candidates[r]) = (candidates[r], candidates[c]);
+            }
+
+            foreach (var cand in candidates)
+            {
+                if (cand.x < 0 || cand.y < 0 || cand.x >= gridWidth || cand.y >= gridHeight) continue;
+                if (occupied.Contains(cand)) continue;
+                // Ensure distance reduced
+                if (Vector2Int.Distance(cand, ec) + 0.0001f >= dist) continue;
+                // Move food
+                occupied.Remove(fc);
+                foodCells[i] = cand;
+                occupied.Add(cand);
+                break;
+            }
+        }
+
+        RenderFood();
+    }
+
+    private void UpdateEnemyEating(float dt)
+    {
+        if (enemyCells == null || enemyCells.Count == 0) return;
+        if (foodCells == null || foodCells.Count == 0) return;
+        enemyEatTimer += dt;
+        if (enemyEatTimer < 1f) return;
+        enemyEatTimer -= 1f;
+
+        // Each second, each enemy may eat at most one adjacent food. Randomize neighbor order.
+        var neighborDirs = new List<Vector2Int>
+        {
+            new Vector2Int(1,0), new Vector2Int(-1,0), new Vector2Int(0,1), new Vector2Int(0,-1),
+            new Vector2Int(1,1), new Vector2Int(1,-1), new Vector2Int(-1,1), new Vector2Int(-1,-1)
+        };
+        for (int e = 0; e < enemyCells.Count; e++)
+        {
+            // Shuffle order randomly per enemy
+            for (int i = 0; i < neighborDirs.Count; i++)
+            {
+                int r = Random.Range(i, neighborDirs.Count);
+                (neighborDirs[i], neighborDirs[r]) = (neighborDirs[r], neighborDirs[i]);
+            }
+            var ec = enemyCells[e];
+            bool ateOne = false;
+            foreach (var d in neighborDirs)
+            {
+                var cell = ec + d;
+                int idx = IndexOfFoodAtCell(cell);
+                if (idx >= 0)
+                {
+                    // Remove food
+                    RemoveFoodAt(idx);
+                    ateOne = true;
+                    break;
+                }
+            }
+            // only one per enemy per tick
+        }
+        RenderFood();
+    }
+
+    private int IndexOfFoodAtCell(Vector2Int cell)
+    {
+        if (foodCells == null) return -1;
+        for (int i = 0; i < foodCells.Count; i++) if (foodCells[i] == cell) return i;
+        return -1;
+    }
+
+    private void RemoveFoodAt(int index)
+    {
+        if (index < 0 || index >= (foodCells?.Count ?? 0)) return;
+        foodCells.RemoveAt(index);
+        if (foodObjects != null && index < foodObjects.Count)
+        {
+            var obj = foodObjects[index];
+            if (obj != null) Destroy(obj);
+            foodObjects.RemoveAt(index);
+        }
+        if (foodArrowContainers != null && index < foodArrowContainers.Count)
+        {
+            var arr = foodArrowContainers[index];
+            if (arr != null) Destroy(arr);
+            foodArrowContainers.RemoveAt(index);
+        }
+        if (foodTargetEnemyIndex != null && index < foodTargetEnemyIndex.Count)
+        {
+            foodTargetEnemyIndex.RemoveAt(index);
+        }
+        if (foodPulsePhaseOffsets != null && index < foodPulsePhaseOffsets.Count)
+        {
+            foodPulsePhaseOffsets.RemoveAt(index);
+        }
+    }
+
     private void ClearFoods()
     {
         if (foodObjects != null)
@@ -1228,7 +1455,16 @@ public class SnakeGame : MonoBehaviour
             }
             foodObjects.Clear();
         }
+        if (foodArrowContainers != null)
+        {
+            foreach (var go in foodArrowContainers)
+            {
+                if (go != null) Destroy(go);
+            }
+            foodArrowContainers.Clear();
+        }
         if (foodCells != null) foodCells.Clear();
+        if (foodTargetEnemyIndex != null) foodTargetEnemyIndex.Clear();
         if (foodPulsePhaseOffsets != null) foodPulsePhaseOffsets.Clear();
     }
 
@@ -1681,7 +1917,7 @@ public class SnakeGame : MonoBehaviour
 
     private Sprite GenerateArrowSprite()
     {
-        // No longer used; kept for backward compatibility
+        // Legacy unused
         const int size = 8;
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
         tex.name = "ArrowTextureUnused";
@@ -1695,6 +1931,45 @@ public class SnakeGame : MonoBehaviour
         }
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
+    }
+
+    private Sprite GenerateDottedArrowSprite()
+    {
+        // Create a thin dotted line arrow (8x32) pointing up; we'll rotate towards enemy
+        int w = 8, h = 32;
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        tex.name = "DottedArrowTexture";
+        tex.filterMode = FilterMode.Point;
+        Color transparent = new Color(0, 0, 0, 0);
+        Color white = Color.white;
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                tex.SetPixel(x, y, transparent);
+            }
+        }
+        // Dots every 4 pixels, center column 2..5
+        for (int y = 0; y < h - 6; y += 4)
+        {
+            for (int x = 2; x <= 5; x++) tex.SetPixel(x, y, white);
+        }
+        // Arrow head (a small triangle at the top)
+        int baseY = h - 6;
+        tex.SetPixel(3, baseY + 0, white);
+        tex.SetPixel(3, baseY + 1, white);
+        tex.SetPixel(2, baseY + 1, white);
+        tex.SetPixel(4, baseY + 1, white);
+        tex.SetPixel(3, baseY + 2, white);
+        tex.SetPixel(2, baseY + 2, white);
+        tex.SetPixel(4, baseY + 2, white);
+        tex.SetPixel(1, baseY + 3, white);
+        tex.SetPixel(5, baseY + 3, white);
+        tex.SetPixel(0, baseY + 4, white);
+        tex.SetPixel(6, baseY + 4, white);
+        tex.SetPixel(3, baseY + 4, white);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.0f), h, 0, SpriteMeshType.FullRect);
     }
 
     private Sprite GenerateSolidCircleSprite(int size, Color fill, Color border)
