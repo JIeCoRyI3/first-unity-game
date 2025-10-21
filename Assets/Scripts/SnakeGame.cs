@@ -2019,7 +2019,9 @@ public class SnakeGame : MonoBehaviour
         levelUpCanvasGO = new GameObject("LevelUpCanvas");
         var canvas = levelUpCanvasGO.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        levelUpCanvasGO.AddComponent<CanvasScaler>();
+        var scaler = levelUpCanvasGO.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1280, 720);
         levelUpCanvasGO.AddComponent<GraphicRaycaster>();
 
         var panel = new GameObject("Panel");
@@ -2037,7 +2039,8 @@ public class SnakeGame : MonoBehaviour
         var dialogImg = dialog.AddComponent<Image>();
         dialogImg.color = new Color(0.12f, 0.14f, 0.18f, 1f);
         var dialogRT = dialog.GetComponent<RectTransform>();
-        dialogRT.sizeDelta = new Vector2(720, 360);
+        // Fix: make the dialog wide and auto-fit its height to content
+        dialogRT.sizeDelta = new Vector2(840, 0f);
         dialogRT.anchorMin = new Vector2(0.5f, 0.5f);
         dialogRT.anchorMax = new Vector2(0.5f, 0.5f);
         dialogRT.anchoredPosition = Vector2.zero;
@@ -2046,6 +2049,11 @@ public class SnakeGame : MonoBehaviour
         v.childAlignment = TextAnchor.MiddleCenter;
         v.spacing = 18f;
         v.padding = new RectOffset(40, 40, 40, 40);
+        v.childControlHeight = true;
+        v.childForceExpandHeight = false;
+
+        var fitter = dialog.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
         var titleGO = new GameObject("Title");
         titleGO.transform.SetParent(dialog.transform, false);

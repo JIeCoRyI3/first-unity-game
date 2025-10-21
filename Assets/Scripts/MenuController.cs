@@ -38,21 +38,16 @@ public class MenuController : MonoBehaviour
         // Canvas
         var canvasGO = new GameObject("Canvas");
         var canvas = canvasGO.AddComponent<Canvas>();
-        // World Space canvas so post-processing affects UI
-        canvas.renderMode = RenderMode.WorldSpace;
-        var cam = Camera.main;
+        // Use overlay so the UI stretches to the full screen
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         var canvasScaler = canvasGO.AddComponent<CanvasScaler>();
         canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         canvasScaler.referenceResolution = new Vector2(1280, 720);
         var crt = canvasGO.GetComponent<RectTransform>();
-        // Set rect in pixels; scale canvas so 100 px = 1 world unit
+        // Ensure the rect matches the reference resolution; anchors make it stretch
         crt.sizeDelta = canvasScaler.referenceResolution;
-        if (cam != null)
-        {
-            canvas.worldCamera = cam; // needed for UI raycasts in world space
-            canvas.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 0f);
-        }
-        canvas.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
+        // Keep scale at 1 for overlay canvases
+        canvas.transform.localScale = Vector3.one;
         canvas.overrideSorting = true;
         canvas.sortingOrder = 1000;
         canvasGO.AddComponent<GraphicRaycaster>();
