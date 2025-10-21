@@ -8,6 +8,10 @@ using UnityEngine.UI;
 
 public class MenuController : MonoBehaviour
 {
+    // Animated gradient background
+    private Image gradientImage;
+    private Texture2D gradientTex;
+    private Sprite gradientSprite;
     private void Start()
     {
         EnsureEventSystem();
@@ -53,11 +57,24 @@ public class MenuController : MonoBehaviour
         canvas.sortingOrder = 1000;
         canvasGO.AddComponent<GraphicRaycaster>();
 
+        // Gradient background behind panel
+        var bgGO = new GameObject("GradientBG");
+        bgGO.transform.SetParent(canvasGO.transform, false);
+        gradientImage = bgGO.AddComponent<Image>();
+        var bgRT = bgGO.GetComponent<RectTransform>();
+        bgRT.anchorMin = new Vector2(0, 0);
+        bgRT.anchorMax = new Vector2(1, 1);
+        bgRT.offsetMin = Vector2.zero;
+        bgRT.offsetMax = Vector2.zero;
+        EnsureGradientResources();
+        UpdateGradientColors(0f);
+
         // Background Panel
         var panelGO = new GameObject("Panel");
         panelGO.transform.SetParent(canvasGO.transform, false);
         var panelImage = panelGO.AddComponent<Image>();
-        panelImage.color = new Color(0.05f, 0.06f, 0.08f, 1f);
+        // Slight transparency to reveal gradient background
+        panelImage.color = new Color(0.05f, 0.06f, 0.08f, 0.35f);
         var panelRect = panelGO.GetComponent<RectTransform>();
         panelRect.anchorMin = new Vector2(0, 0);
         panelRect.anchorMax = new Vector2(1, 1);
@@ -146,6 +163,54 @@ public class MenuController : MonoBehaviour
         pixelUnitSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
         pixelUnitSprite.name = "UnitSprite1x1_Menu";
         return pixelUnitSprite;
+    }
+
+    private void Update()
+    {
+        // Animate gradient hue shift over time
+        if (gradientImage == null) return;
+        float t = Time.time;
+        UpdateGradientColors(t);
+    }
+
+    private void EnsureGradientResources()
+    {
+        if (gradientTex == null)
+        {
+            // Vertical gradient texture (width 4 for better filtering, height 256)
+            gradientTex = new Texture2D(4, 256, TextureFormat.RGBA32, false);
+            gradientTex.wrapMode = TextureWrapMode.Clamp;
+            gradientTex.filterMode = FilterMode.Bilinear;
+        }
+        if (gradientSprite == null)
+        {
+            gradientSprite = Sprite.Create(gradientTex, new Rect(0, 0, gradientTex.width, gradientTex.height), new Vector2(0.5f, 0.5f));
+        }
+        if (gradientImage != null && gradientImage.sprite == null)
+        {
+            gradientImage.sprite = gradientSprite;
+        }
+    }
+
+    private void UpdateGradientColors(float time)
+    {
+        EnsureGradientResources();
+        // Two hues that slowly shift over time to create a shimmering look
+        float h1 = Mathf.Repeat(0.60f + Mathf.Sin(time * 0.12f) * 0.05f, 1f); // teal -> cyan
+        float h2 = Mathf.Repeat(0.80f + Mathf.Cos(time * 0.10f) * 0.05f, 1f); // purple -> magenta
+        Color top = Color.HSVToRGB(h1, 0.55f, 0.22f);
+        Color bottom = Color.HSVToRGB(h2, 0.70f, 0.20f);
+        // Build vertical gradient into texture
+        int w = gradientTex.width;
+        int h = gradientTex.height;
+        for (int y = 0; y < h; y++)
+        {
+            float u = (float)y / Mathf.Max(1, h - 1);
+            Color row = Color.Lerp(top, bottom, u);
+            for (int x = 0; x < w; x++) gradientTex.SetPixel(x, y, row);
+        }
+        gradientTex.Apply(false, false);
+        if (gradientImage != null) gradientImage.enabled = true;
     }
 
     private void QuitApp()

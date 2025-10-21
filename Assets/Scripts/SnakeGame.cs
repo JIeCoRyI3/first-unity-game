@@ -156,7 +156,6 @@ public class SnakeGame : MonoBehaviour
         // First enemy should spawn at 20 seconds
         defaultEnemySpawnIntervalSeconds = 20f;
         StartNewGame();
-        BeginCountdown(2f);
     }
 
     private void Update()
@@ -374,6 +373,9 @@ public class SnakeGame : MonoBehaviour
         // Hide any previous game over UI
         HideGameOverUI();
         HideLevelUpUI();
+
+        // Begin pre-start countdown on every new run
+        BeginCountdown(2f);
     }
 
     private void HandleInput()
@@ -2035,15 +2037,15 @@ public class SnakeGame : MonoBehaviour
         var dialogImg = dialog.AddComponent<Image>();
         dialogImg.color = new Color(0.12f, 0.14f, 0.18f, 1f);
         var dialogRT = dialog.GetComponent<RectTransform>();
-        dialogRT.sizeDelta = new Vector2(560, 300);
+        dialogRT.sizeDelta = new Vector2(720, 360);
         dialogRT.anchorMin = new Vector2(0.5f, 0.5f);
         dialogRT.anchorMax = new Vector2(0.5f, 0.5f);
         dialogRT.anchoredPosition = Vector2.zero;
 
         var v = dialog.AddComponent<VerticalLayoutGroup>();
         v.childAlignment = TextAnchor.MiddleCenter;
-        v.spacing = 12f;
-        v.padding = new RectOffset(20, 20, 20, 20);
+        v.spacing = 18f;
+        v.padding = new RectOffset(40, 40, 40, 40);
 
         var titleGO = new GameObject("Title");
         titleGO.transform.SetParent(dialog.transform, false);
