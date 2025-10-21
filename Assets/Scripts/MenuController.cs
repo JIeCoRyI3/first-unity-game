@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 using UnityEngine.EventSystems;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem.UI;
@@ -12,10 +13,15 @@ public class MenuController : MonoBehaviour
     private Image gradientImage;
     private Texture2D gradientTex;
     private Sprite gradientSprite;
+    private List<Button> buttons;
+    private int selectedIndex;
+
     private void Start()
     {
         EnsureEventSystem();
         BuildMenuUI();
+        CacheButtons();
+        UpdateSelectionVisuals();
     }
 
     private void EnsureEventSystem()
@@ -108,6 +114,14 @@ public class MenuController : MonoBehaviour
         quitBtn.onClick.AddListener(QuitApp);
     }
 
+    private void CacheButtons()
+    {
+        buttons = new List<Button>(FindObjectsOfType<Button>());
+        // Keep order as in hierarchy under the menu panel
+        buttons.Sort((a,b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+        selectedIndex = Mathf.Clamp(selectedIndex, 0, Mathf.Max(0, buttons.Count - 1));
+    }
+
     private Button CreateButton(Transform parent, string text)
     {
         var btnGO = new GameObject(text + "Button");
@@ -163,9 +177,88 @@ public class MenuController : MonoBehaviour
     private void Update()
     {
         // Animate gradient hue shift over time
-        if (gradientImage == null) return;
-        float t = Time.time;
-        UpdateGradientColors(t);
+        if (gradientImage != null)
+        {
+            float t = Time.time;
+            UpdateGradientColors(t);
+        }
+
+        if (buttons == null || buttons.Count == 0) return;
+#if ENABLE_INPUT_SYSTEM
+        var kb = UnityEngine.InputSystem.Keyboard.current;
+        if (kb != null)
+        {
+            if (kb.upArrowKey.wasPressedThisFrame)
+            {
+                MoveSelection(-1);
+            }
+            else if (kb.downArrowKey.wasPressedThisFrame)
+            {
+                MoveSelection(1);
+            }
+            else if (kb.enterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame)
+            {
+                ActivateSelected();
+            }
+        }
+#else
+        if (Input.GetKeyDown(KeyCode.UpArrow))
+        {
+            MoveSelection(-1);
+        }
+        else if (Input.GetKeyDown(KeyCode.DownArrow))
+        {
+            MoveSelection(1);
+        }
+        else if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
+        {
+            ActivateSelected();
+        }
+#endif
+    }
+
+    private void MoveSelection(int delta)
+    {
+        selectedIndex = (selectedIndex + delta + buttons.Count) % buttons.Count;
+        UpdateSelectionVisuals();
+    }
+
+    private void ActivateSelected()
+    {
+        if (selectedIndex < 0 || selectedIndex >= buttons.Count) return;
+        buttons[selectedIndex]?.onClick?.Invoke();
+    }
+
+    private void UpdateSelectionVisuals()
+    {
+        if (buttons == null) return;
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            var btn = buttons[i];
+            if (btn == null) continue;
+            var img = btn.GetComponent<Image>();
+            if (img == null) continue;
+            var colors = btn.colors;
+            if (i == selectedIndex)
+            {
+                colors.normalColor = new Color(0.22f, 0.26f, 0.34f, 1f);
+                var ol = img.GetComponent<Outline>();
+                if (ol == null) ol = img.gameObject.AddComponent<Outline>();
+                ol.effectColor = Color.white;
+                ol.effectDistance = new Vector2(2f, 2f);
+                ol.useGraphicAlpha = false;
+            }
+            else
+            {
+                colors.normalColor = new Color(0.15f, 0.18f, 0.22f, 1f);
+                var ol = img.GetComponent<Outline>();
+                if (ol == null) ol = img.gameObject.AddComponent<Outline>();
+                ol.effectColor = new Color(1f,1f,1f,0f);
+                ol.effectDistance = new Vector2(2f, 2f);
+                ol.useGraphicAlpha = false;
+            }
+            btn.colors = colors;
+        }
     }
 
     private void EnsureGradientResources()

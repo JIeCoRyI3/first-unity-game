@@ -69,10 +69,30 @@ public class LevelUpController : MonoBehaviour
             if (i == selectedIndex)
             {
                 colors.normalColor = new Color(0.26f, 0.32f, 0.42f, 1f);
+                // Ensure visible white outline on selected
+                var img = btn.GetComponent<Image>();
+                if (img != null)
+                {
+                    var ol = img.GetComponent<Outline>();
+                    if (ol == null) ol = img.gameObject.AddComponent<Outline>();
+                    ol.effectColor = new Color(1f, 1f, 1f, 1f);
+                    ol.effectDistance = new Vector2(2f, 2f);
+                    ol.useGraphicAlpha = false;
+                }
             }
             else
             {
                 colors.normalColor = new Color(0.18f, 0.22f, 0.28f, 1f);
+                // Hide outline when not selected
+                var img = btn.GetComponent<Image>();
+                if (img != null)
+                {
+                    var ol = img.GetComponent<Outline>();
+                    if (ol == null) ol = img.gameObject.AddComponent<Outline>();
+                    ol.effectColor = new Color(1f, 1f, 1f, 0f);
+                    ol.effectDistance = new Vector2(2f, 2f);
+                    ol.useGraphicAlpha = false;
+                }
             }
             btn.colors = colors;
         }
