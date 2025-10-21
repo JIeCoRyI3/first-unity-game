@@ -27,6 +27,11 @@ public class SnakeGame : MonoBehaviour
     [SerializeField, Tooltip("Border color")] private Color borderColor = new Color(0.85f, 0.85f, 0.95f);
     [SerializeField, Tooltip("Border thickness in world units")] private float borderThickness = 0.12f;
 
+    [Header("Grid Visuals")]
+    [SerializeField, Tooltip("Light checker cell color")] private Color gridColorLight = new Color(0.10f, 0.12f, 0.15f);
+    [SerializeField, Tooltip("Dark checker cell color")] private Color gridColorDark  = new Color(0.08f, 0.09f, 0.12f);
+    [SerializeField, Tooltip("Extra top world-space margin under HUD")] private float topUiWorldMargin = 1.0f;
+
     private LinkedList<Vector2Int> snakeCells; // head is First
     private HashSet<Vector2Int> snakeCellSet;  // for O(1) collision checks
 
@@ -41,11 +46,13 @@ public class SnakeGame : MonoBehaviour
 
     // Rendering
     private Transform renderContainer;
+    private Transform backgroundContainer;
     private Transform borderContainer;
     private GameObject borderTop;
     private GameObject borderBottom;
     private GameObject borderLeft;
     private GameObject borderRight;
+    private readonly List<GameObject> backgroundTiles = new List<GameObject>();
     private readonly List<GameObject> segmentObjects = new List<GameObject>();
     private readonly List<Transform> segmentArrowTransforms = new List<Transform>();
     // Food rendering (now supports multiple food items)
@@ -152,8 +159,12 @@ public class SnakeGame : MonoBehaviour
         float halfWidth = (gridWidth * 0.5f) + margin;
         float sizeByHeight = halfHeight;
         float sizeByWidth = cam.aspect > 0f ? (halfWidth / cam.aspect) : halfHeight;
-        cam.orthographicSize = Mathf.Max(sizeByHeight, sizeByWidth);
-        cam.transform.position = new Vector3((gridWidth - 1) * 0.5f, (gridHeight - 1) * 0.5f, -10f);
+        float uiPad = Mathf.Max(0f, topUiWorldMargin);
+        float baseSize = Mathf.Max(sizeByHeight, sizeByWidth);
+        cam.orthographicSize = baseSize + (uiPad * 0.5f);
+        float centerX = (gridWidth - 1) * 0.5f;
+        float centerY = (gridHeight - 1) * 0.5f + (uiPad * 0.5f);
+        cam.transform.position = new Vector3(centerX, centerY, -10f);
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = backgroundColor;
     }
@@ -191,6 +202,7 @@ public class SnakeGame : MonoBehaviour
             foodSprites = GenerateFoodSprites();
         }
 
+        BuildBackgroundGrid();
         BuildBorders();
     }
 
@@ -660,14 +672,6 @@ public class SnakeGame : MonoBehaviour
             srA.color = new Color(0.95f, 0.98f, 1f, 0.92f);
             srA.sortingOrder = 1;
             segmentArrowTransforms.Add(arrow.transform);
-            // Ensure pulse buffers align to segment count
-            if (snakePulseWaveStartTimes != null)
-            {
-                while (snakePulseWaveStartTimes.Count < segmentObjects.Count)
-                {
-                    snakePulseWaveStartTimes.Add(-9999f);
-                }
-            }
         }
     }
 
@@ -707,11 +711,6 @@ public class SnakeGame : MonoBehaviour
     {
         if (segmentObjects == null || segmentObjects.Count == 0) return;
         if (snakePulseWaveStartTimes == null || snakePulseWaveStartTimes.Count == 0) return;
-        // Ensure buffer length
-        while (snakePulseWaveStartTimes.Count < segmentObjects.Count)
-        {
-            snakePulseWaveStartTimes.Add(-9999f);
-        }
         for (int i = 0; i < segmentObjects.Count; i++)
         {
             var seg = segmentObjects[i];
@@ -873,6 +872,44 @@ public class SnakeGame : MonoBehaviour
         EnsureBorder(ref borderRight, "Right");
         borderRight.transform.position = new Vector3(gridWidth - 0.5f, (gridHeight - 1) * 0.5f, 0f);
         borderRight.transform.localScale = new Vector3(Mathf.Max(0.01f, borderThickness), gridHeight, 1f);
+    }
+
+    private void BuildBackgroundGrid()
+    {
+        if (renderContainer == null) EnsureRuntimeAssets();
+        if (backgroundContainer == null)
+        {
+            var go = new GameObject("BackgroundGrid");
+            backgroundContainer = go.transform;
+            backgroundContainer.SetParent(renderContainer, worldPositionStays: false);
+        }
+
+        // Clear previous tiles if grid size changed
+        if (backgroundTiles.Count > 0)
+        {
+            for (int i = 0; i < backgroundTiles.Count; i++)
+            {
+                var t = backgroundTiles[i];
+                if (t != null) Destroy(t);
+            }
+            backgroundTiles.Clear();
+        }
+
+        for (int y = 0; y < gridHeight; y++)
+        {
+            for (int x = 0; x < gridWidth; x++)
+            {
+                var tile = new GameObject($"Cell_{x}_{y}");
+                tile.transform.SetParent(backgroundContainer, false);
+                tile.transform.position = new Vector3(x, y, 0f);
+                var sr = tile.AddComponent<SpriteRenderer>();
+                sr.sprite = cellSprite;
+                bool even = (((x + y) & 1) == 0);
+                sr.color = even ? gridColorLight : gridColorDark;
+                sr.sortingOrder = -2; // behind borders, snake and food
+                backgroundTiles.Add(tile);
+            }
+        }
     }
 
     // ===== Progression / Leveling =====
@@ -1070,6 +1107,7 @@ public class SnakeGame : MonoBehaviour
         gridWidth = Mathf.Max(1, gridWidth + 1);
         gridHeight = Mathf.Max(1, gridHeight + 1);
         SetupCamera();
+        BuildBackgroundGrid();
         BuildBorders();
         // Ensure all objects are within new bounds and re-render
         RenderWorld(fullRebuild: true);
