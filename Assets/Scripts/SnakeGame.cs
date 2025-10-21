@@ -1135,7 +1135,7 @@ public class SnakeGame : MonoBehaviour
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(barGO.transform, false);
         var text = textGO.AddComponent<Text>();
-        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.font = PixelFontProvider.Get();
         text.fontSize = 20;
         text.alignment = TextAnchor.MiddleCenter;
         text.color = new Color(0.95f, 0.97f, 1f, 1f);
@@ -1155,7 +1155,7 @@ public class SnakeGame : MonoBehaviour
         if (hudCanvasGO == null) return;
         float fill = (xpToNext > 0) ? Mathf.Clamp01(currentXp / (float)xpToNext) : 0f;
         if (xpFillImage != null) xpFillImage.fillAmount = fill;
-        if (xpText != null) xpText.text = $"Ур. {playerLevel}  XP {currentXp}/{xpToNext}";
+        if (xpText != null) xpText.text = $"Lv. {playerLevel}  XP {currentXp}/{xpToNext}";
     }
 
     private void ShowLevelUpUI()
@@ -1197,8 +1197,8 @@ public class SnakeGame : MonoBehaviour
         var titleGO = new GameObject("Title");
         titleGO.transform.SetParent(dialog.transform, false);
         var title = titleGO.AddComponent<Text>();
-        title.text = "Повышение уровня! Выберите улучшение";
-        title.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        title.text = "Level up! Choose an upgrade";
+        title.font = PixelFontProvider.Get();
         title.fontSize = 28;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.95f, 0.97f, 1f, 1f);
@@ -1206,15 +1206,15 @@ public class SnakeGame : MonoBehaviour
         titleLE.minHeight = 56f;
 
         var buttons = new List<Button>();
-        Button b1 = CreateUIButton(dialog.transform, "+1 еда на поле");
+        Button b1 = CreateUIButton(dialog.transform, "+1 food on field");
         b1.onClick.AddListener(() => { ApplyUpgradeExtraFood(); });
         buttons.Add(b1);
 
-        Button b2 = CreateUIButton(dialog.transform, "Увеличить поле на +1×+1");
+        Button b2 = CreateUIButton(dialog.transform, "Increase grid by +1x+1");
         b2.onClick.AddListener(() => { ApplyUpgradeExpandGrid(); });
         buttons.Add(b2);
 
-        Button b3 = CreateUIButton(dialog.transform, "Замедлить время на 5%");
+        Button b3 = CreateUIButton(dialog.transform, "Slow time by 5%");
         b3.onClick.AddListener(() => { ApplyUpgradeSlowTime(); });
         buttons.Add(b3);
 
@@ -1411,18 +1411,18 @@ public class SnakeGame : MonoBehaviour
         var titleGO = new GameObject("Title");
         titleGO.transform.SetParent(dialog.transform, false);
         var title = titleGO.AddComponent<Text>();
-        title.text = "Игра окончена";
-        title.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        title.text = "Game Over";
+        title.font = PixelFontProvider.Get();
         title.fontSize = 36;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.95f, 0.97f, 1f, 1f);
         var titleLE = titleGO.AddComponent<LayoutElement>();
         titleLE.minHeight = 64f;
 
-        Button restartBtn = CreateUIButton(dialog.transform, "Заново");
+        Button restartBtn = CreateUIButton(dialog.transform, "Restart");
         restartBtn.onClick.AddListener(() => { HideGameOverUI(); StartNewGame(); });
 
-        Button menuBtn = CreateUIButton(dialog.transform, "В меню");
+        Button menuBtn = CreateUIButton(dialog.transform, "Menu");
         menuBtn.onClick.AddListener(() => { HideGameOverUI(); SceneManager.LoadScene("Menu"); });
     }
 
@@ -1447,7 +1447,7 @@ public class SnakeGame : MonoBehaviour
         textGO.transform.SetParent(go.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = label;
-        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.font = PixelFontProvider.Get();
         t.fontSize = 28;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 1f, 1f);

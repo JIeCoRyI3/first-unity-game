@@ -75,7 +75,7 @@ public class MenuController : MonoBehaviour
         titleGO.transform.SetParent(panelGO.transform, false);
         var title = titleGO.AddComponent<Text>();
         title.text = "SNAKE";
-        title.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        title.font = PixelFontProvider.Get();
         title.fontSize = 56;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = new Color(0.92f, 0.96f, 1f, 1f);
@@ -83,15 +83,15 @@ public class MenuController : MonoBehaviour
         titleLE.minHeight = 80f;
 
         // Play button
-        var playBtn = CreateButton(panelGO.transform, "Играть");
+        var playBtn = CreateButton(panelGO.transform, "Play");
         playBtn.onClick.AddListener(() => SceneManager.LoadScene("Snake"));
 
         // Settings button
-        var settingsBtn = CreateButton(panelGO.transform, "Настройки");
+        var settingsBtn = CreateButton(panelGO.transform, "Settings");
         settingsBtn.onClick.AddListener(() => SceneManager.LoadScene("Settings"));
 
         // Quit button
-        var quitBtn = CreateButton(panelGO.transform, "Выход");
+        var quitBtn = CreateButton(panelGO.transform, "Quit");
         quitBtn.onClick.AddListener(QuitApp);
     }
 
@@ -117,7 +117,7 @@ public class MenuController : MonoBehaviour
         textGO.transform.SetParent(btnGO.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = text;
-        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.font = PixelFontProvider.Get();
         t.fontSize = 28;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 0.9f, 1f);

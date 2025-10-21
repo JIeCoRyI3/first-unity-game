@@ -151,7 +151,7 @@ public class SettingsManager : MonoBehaviour
         if (colorAdjustments == null) EnsureGlobalPostFX();
         if (colorAdjustments != null)
         {
-            // Interpret "контраст" as perceived color intensity:
+            // Interpret "contrast" as perceived color intensity:
             // 0% => grayscale, 50% => normal, 100% => very saturated
             float saturation = Mathf.Lerp(-100f, 100f, Mathf.Clamp01(percent / 100f));
             colorAdjustments.saturation.value = saturation;
