@@ -2328,14 +2328,14 @@ public class SnakeGame : MonoBehaviour
 
     private Sprite GenerateCornerMaskSprite(int size)
     {
-        // Quarter-circle mask in the top-right quadrant with pivot at center,
-        // so placing at cell center and rotating positions it into any corner.
+        // Quarter-circle "cut-out" mask: fills the OUTER wedge (square corner minus a quarter circle)
+        // in the top-right quadrant with pivot at center. Rotated per turn to trim the outer corner.
         int s = Mathf.Max(8, size);
         var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
         tex.name = "CornerMaskTexture";
         tex.filterMode = FilterMode.Point;
         Color transparent = new Color(0, 0, 0, 0);
-        Color solid = Color.white; // color will be overridden per-cell (to grid color)
+        Color solid = Color.white; // color overridden per-cell to match grid
         Vector2 center = new Vector2((s - 1) * 0.5f, (s - 1) * 0.5f);
         float radius = s * 0.5f;
         for (int y = 0; y < s; y++)
@@ -2344,11 +2344,11 @@ public class SnakeGame : MonoBehaviour
             {
                 float dx = x - center.x;
                 float dy = y - center.y;
-                // top-right quadrant relative to center
-                bool inQuad = (x >= center.x && y >= center.y);
+                bool inQuad = (x >= center.x && y >= center.y); // top-right quadrant
                 float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                bool inside = inQuad && dist <= radius;
-                tex.SetPixel(x, y, inside ? solid : transparent);
+                // Fill the OUTER wedge (outside the circle but inside the quadrant)
+                bool fill = inQuad && dist >= radius - 0.0001f;
+                tex.SetPixel(x, y, fill ? solid : transparent);
             }
         }
         tex.Apply();
@@ -2455,16 +2455,23 @@ public class SnakeGame : MonoBehaviour
         // Determine which corner arc to draw for a turn from 'fromTail' to 'toHead'
         // We constructed the mask in bottom-left origin quadrant; choose rotation so the rounded arc
         // sits on the exterior of the turn.
-        // Map the four L-turn combinations to rotations (degrees):
-        // Right->Up : 0, Up->Right : 180, Right->Down : 270, Down->Right : 90,
-        // Left->Up : 90, Up->Left : 270, Left->Down : 180, Down->Left : 0
+        // Map the four L-turn combinations to rotations (degrees) for OUTER wedge mask.
+        // Fixed: swap Left->Up and Right->Down assignments.
+        // Right->Up : 0
         if (fromTail == Vector2Int.right && toHead == Vector2Int.up) return 0f;
+        // Up->Right : 180
         if (fromTail == Vector2Int.up && toHead == Vector2Int.right) return 180f;
-        if (fromTail == Vector2Int.right && toHead == Vector2Int.down) return 270f;
-        if (fromTail == Vector2Int.down && toHead == Vector2Int.right) return 90f;
-        if (fromTail == Vector2Int.left && toHead == Vector2Int.up) return 90f;
-        if (fromTail == Vector2Int.up && toHead == Vector2Int.left) return 270f;
+        // Right->Down : 90 (was 270)
+        if (fromTail == Vector2Int.right && toHead == Vector2Int.down) return 90f;
+        // Down->Right : 270 (was 90)
+        if (fromTail == Vector2Int.down && toHead == Vector2Int.right) return 270f;
+        // Left->Up : 270 (was 90)
+        if (fromTail == Vector2Int.left && toHead == Vector2Int.up) return 270f;
+        // Up->Left : 90 (was 270)
+        if (fromTail == Vector2Int.up && toHead == Vector2Int.left) return 90f;
+        // Left->Down : 180
         if (fromTail == Vector2Int.left && toHead == Vector2Int.down) return 180f;
+        // Down->Left : 0
         if (fromTail == Vector2Int.down && toHead == Vector2Int.left) return 0f;
         return 0f;
     }
