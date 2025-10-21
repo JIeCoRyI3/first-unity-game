@@ -2452,24 +2452,50 @@ public class SnakeGame : MonoBehaviour
 
     private float GetCornerRotation(Vector2Int fromTail, Vector2Int toHead)
     {
-        // Choose wedge quadrant based on turn handedness:
-        // - Clockwise (right turn): use outer corner aligned with (fromTail + toHead)
-        // - Counter-clockwise (left turn): use the opposite corner (-(fromTail + toHead))
-        // Use incoming direction (towards this cell) to determine handedness correctly
-        Vector2Int inDir = new Vector2Int(-fromTail.x, -fromTail.y);
-        int cross = (inDir.x * toHead.y) - (inDir.y * toHead.x); // >0 => CCW, <0 => CW
-        // Keep base quadrant from current implementation to preserve CW correctness
-        Vector2Int sum = fromTail + toHead; // one of (±1, ±1)
-        int qx = sum.x >= 0 ? 1 : -1;
-        int qy = sum.y >= 0 ? 1 : -1;
-        if (cross > 0)
+        // Universal rule:
+        // 1) Base side comes from incoming movement direction (inDir):
+        //    up => top, down => bottom, left => left, right => right.
+        // 2) Corner is chosen opposite to the new movement direction (outDir):
+        //    combine base side with opposite(outDir) to pick the exact quadrant.
+
+        Vector2Int inDir = new Vector2Int(-fromTail.x, -fromTail.y); // direction snake moved INTO this cell
+        Vector2Int outDir = toHead;                                   // direction snake moves OUT of this cell
+
+        int qx = 0; // -1 = left, +1 = right
+        int qy = 0; // -1 = bottom, +1 = top
+
+        // Vertical incoming movement => base is top/bottom (qy), choose horizontal from opposite(outDir.x)
+        if (inDir.x == 0 && Mathf.Abs(inDir.y) == 1)
         {
-            // CCW: previously inverted; now swap X/Y before invert to match user's expectation
-            // This effectively mirrors along the diagonal so top-right <-> bottom-left, top-left <-> bottom-right
-            int tqx = qx; int tqy = qy;
-            qx = -tqy; qy = -tqx;
+            qy = inDir.y > 0 ? 1 : -1; // top if up, bottom if down
+            int oppX = -outDir.x;      // opposite to new horizontal direction
+            if (oppX == 0)
+            {
+                // Not a turn (straight); no corner rounding needed. Default to top-right for stability.
+                return qy > 0 ? 0f : 180f;
+            }
+            qx = oppX > 0 ? 1 : -1;
         }
-        // Map quadrant to rotation where 0° is top-right corner in our sprite
+        // Horizontal incoming movement => base is left/right (qx), choose vertical from opposite(outDir.y)
+        else if (inDir.y == 0 && Mathf.Abs(inDir.x) == 1)
+        {
+            qx = inDir.x > 0 ? 1 : -1; // right if moving right into the cell, else left
+            int oppY = -outDir.y;      // opposite to new vertical direction
+            if (oppY == 0)
+            {
+                // Not a turn; default to right-top for stability.
+                return qx > 0 ? 0f : 90f;
+            }
+            qy = oppY > 0 ? 1 : -1;
+        }
+        else
+        {
+            // Fallback: derive quadrant from opposite of outDir alone
+            qx = (-outDir.x) >= 0 ? 1 : -1;
+            qy = (-outDir.y) >= 0 ? 1 : -1;
+        }
+
+        // Map quadrant to rotation: 0 (top-right), 90 (top-left), 180 (bottom-left), 270 (bottom-right)
         if (qx == 1 && qy == 1) return 0f;      // top-right
         if (qx == -1 && qy == 1) return 90f;    // top-left
         if (qx == -1 && qy == -1) return 180f;  // bottom-left
