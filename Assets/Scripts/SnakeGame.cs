@@ -293,13 +293,43 @@ public class SnakeGame : MonoBehaviour
         // Prefer slicing ourselves by grid to ensure correct 6x6 (body) and 2x2 (head)
         if (bodyFrames == null)
         {
-            var bodyTex = Resources.Load<Texture2D>("SnakeSprites/snake-body-spritesheet");
+            // Prefer new 2x2 body asset "snake.body"
+            var bodyTex = Resources.Load<Texture2D>("SnakeSprites/snake.body");
             if (bodyTex != null)
             {
                 bodyTex.filterMode = FilterMode.Point;
-                bodyFrames = SliceSpriteSheet(bodyTex, 6, 6);
+                bodyFrames = SliceSpriteSheet(bodyTex, 2, 2);
             }
-            // Fallback to importer-sliced sprites if runtime slicing failed
+            // Fallback to importer-sliced sprites for "snake.body"
+            if (bodyFrames == null || bodyFrames.Length == 0)
+            {
+                bodyFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake.body");
+                if (bodyFrames != null && bodyFrames.Length == 0) bodyFrames = null;
+            }
+            // Legacy fallbacks for older assets
+            if (bodyFrames == null || bodyFrames.Length == 0)
+            {
+                var legacyBodyTex = Resources.Load<Texture2D>("SnakeSprites/snake-body");
+                if (legacyBodyTex != null)
+                {
+                    legacyBodyTex.filterMode = FilterMode.Point;
+                    bodyFrames = SliceSpriteSheet(legacyBodyTex, 2, 2);
+                }
+            }
+            if (bodyFrames == null || bodyFrames.Length == 0)
+            {
+                bodyFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-body");
+                if (bodyFrames != null && bodyFrames.Length == 0) bodyFrames = null;
+            }
+            if (bodyFrames == null || bodyFrames.Length == 0)
+            {
+                var bodySheetTex = Resources.Load<Texture2D>("SnakeSprites/snake-body-spritesheet");
+                if (bodySheetTex != null)
+                {
+                    bodySheetTex.filterMode = FilterMode.Point;
+                    bodyFrames = SliceSpriteSheet(bodySheetTex, 6, 6);
+                }
+            }
             if (bodyFrames == null || bodyFrames.Length == 0)
             {
                 bodyFrames = Resources.LoadAll<Sprite>("SnakeSprites/snake-body-spritesheet");
