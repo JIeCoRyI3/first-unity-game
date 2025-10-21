@@ -30,6 +30,12 @@ public class SnakeGame : MonoBehaviour
     [SerializeField, Tooltip("Enemy tint color")] private Color enemyColor = new Color(0.9f, 0.25f, 0.85f, 1f);
     [SerializeField, Tooltip("Seconds between food attraction steps (1 cell)")] private float foodAttractIntervalSeconds = 3f;
     [SerializeField, Tooltip("Seconds between enemy eating checks")] private float enemyEatIntervalSeconds = 3f;
+    [SerializeField, Tooltip("Minimum allowed enemy spawn interval (sec)")] private float minEnemySpawnIntervalSeconds = 0.05f;
+
+    [Header("Enemy Animation")]
+    [SerializeField, Tooltip("Bounce cycle duration (sec)")] private float enemyBounceCycleSeconds = 0.6f;
+    [SerializeField, Tooltip("Primary bounce height (world units)")] private float enemyBounceAmplitudeUnits = 0.14f;
+    [SerializeField, Tooltip("Secondary bounce height as fraction of primary (0..1)")] private float enemySecondaryBounceScale = 0.45f;
 
     [Header("Visuals")]
     [SerializeField, Tooltip("Border color")] private Color borderColor = new Color(0.85f, 0.85f, 0.95f);
@@ -51,6 +57,7 @@ public class SnakeGame : MonoBehaviour
     private bool isPaused;
     private float moveTimer;
     private float defaultMoveIntervalSeconds;
+    private float defaultEnemySpawnIntervalSeconds;
 
     // Rendering
     private Transform renderContainer;
@@ -78,6 +85,7 @@ public class SnakeGame : MonoBehaviour
     private Sprite[] foodSprites;
     private bool foodNeedsSprite;
     private GameObject gameOverCanvasGO;
+    private Material lineMaterial;
 
     // Progression / Roguelike
     [Header("Roguelike Progression")]
@@ -139,6 +147,8 @@ public class SnakeGame : MonoBehaviour
         EnsureHudExists();
         // Capture default speed so upgrades don't persist across restarts
         defaultMoveIntervalSeconds = moveIntervalSeconds;
+        // First enemy should spawn at 20 seconds
+        defaultEnemySpawnIntervalSeconds = 20f;
         StartNewGame();
     }
 
@@ -180,6 +190,9 @@ public class SnakeGame : MonoBehaviour
         // Continuous visual updates (pulsations)
         UpdateFoodPulse(Time.time);
         UpdateSnakePulse(Time.time);
+        // Enemy bounce animation and arrow line update
+        UpdateEnemyBounce(Time.time);
+        UpdateFoodArrowLines();
         
         // Sprite animation
         UpdateSpriteAnimations(dt);
@@ -305,6 +318,8 @@ public class SnakeGame : MonoBehaviour
         // Reset timers & enemy engagement state
         totalPlayTimeSeconds = 0f;
         enemySpawnTimerSeconds = 0f;
+        // Reset spawn cadence to default at the start of each run (20s for first spawn)
+        enemySpawnIntervalSeconds = Mathf.Max(minEnemySpawnIntervalSeconds, defaultEnemySpawnIntervalSeconds);
         isEngagedWithEnemy = false;
         engagedEnemyIndex = -1;
         engagedEnemyCell = new Vector2Int(-9999, -9999);
@@ -810,39 +825,16 @@ public class SnakeGame : MonoBehaviour
                 obj.transform.position = new Vector3(pos.x, pos.y, 0f);
                 // Base scale reset; animated every Update
                 obj.transform.localScale = Vector3.one;
-                // Update arrow towards target enemy if any
-                if (foodArrowContainers != null && i < foodArrowContainers.Count)
-                {
-                    var arrow = foodArrowContainers[i];
-                    if (arrow != null)
-                    {
-                        int targetIdx = (foodTargetEnemyIndex != null && i < foodTargetEnemyIndex.Count) ? foodTargetEnemyIndex[i] : -1;
-                        if (targetIdx >= 0 && enemyCells != null && targetIdx < enemyCells.Count)
-                        {
-                            arrow.SetActive(true);
-                            var enemyPos = enemyCells[targetIdx];
-                            Vector2 from = new Vector2(pos.x + 0.5f, pos.y + 0.5f);
-                            Vector2 to = new Vector2(enemyPos.x + 0.5f, enemyPos.y + 0.5f);
-                            Vector2 dir = (to - from);
-                            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg - 90f; // sprite points up by default
-                            float dist = dir.magnitude;
-
-                            // Place arrow so that its tail is at 'from' and its head at 'to'
-                            // Our generated sprite has pivot at (0.5, 0.0) and height of 32 pixels per unit
-                            // So localScale.y scales its length from pivot upwards
-                            arrow.transform.rotation = Quaternion.Euler(0f, 0f, angle);
-                            // Position at the exact midpoint so we don't see artifacts if PPU differs
-                            Vector2 mid = (from + to) * 0.5f;
-                            arrow.transform.position = new Vector3(mid.x, mid.y, 0f);
-                            // Scale Y to full length; X kept thin constant
-                            arrow.transform.localScale = new Vector3(1f, dist, 1f);
-                        }
-                        else
-                        {
-                            arrow.SetActive(false);
-                        }
-                    }
-                }
+                // Arrow line is updated elsewhere per-frame
+            }
+        }
+        // Hide any extra arrows beyond active foods
+        if (foodArrowContainers != null)
+        {
+            for (int i = foodCells.Count; i < foodArrowContainers.Count; i++)
+            {
+                var arrow = foodArrowContainers[i];
+                if (arrow != null) arrow.SetActive(false);
             }
         }
     }
@@ -910,10 +902,20 @@ public class SnakeGame : MonoBehaviour
             if (foodArrowContainers == null) foodArrowContainers = new List<GameObject>();
             var arrow = new GameObject("FoodArrow");
             arrow.transform.SetParent(renderContainer, false);
-            var sr = arrow.AddComponent<SpriteRenderer>();
-            sr.sprite = GenerateDottedLineSprite();
-            sr.color = new Color(1f, 1f, 1f, 0.6f);
-            sr.sortingOrder = -1; // behind food and snake
+            var lr = arrow.AddComponent<LineRenderer>();
+            if (lineMaterial == null)
+            {
+                var shader = Shader.Find("Sprites/Default");
+                lineMaterial = new Material(shader);
+            }
+            lr.material = lineMaterial;
+            lr.useWorldSpace = true;
+            lr.positionCount = 2;
+            lr.startWidth = 0.06f;
+            lr.endWidth = 0.06f;
+            lr.startColor = new Color(1f, 1f, 1f, 0.6f);
+            lr.endColor = new Color(1f, 1f, 1f, 0.6f);
+            lr.sortingOrder = -1; // behind food and snake
             // hide by default until a valid target within radius 2 is found
             arrow.SetActive(false);
             foodArrowContainers.Add(arrow);
@@ -994,6 +996,8 @@ public class SnakeGame : MonoBehaviour
                 enemyCells.Add(p);
                 enemyHps.Add(Mathf.Max(1, enemyHpPer));
                 EnsureEnemyObjectForIndex(enemyCells.Count - 1);
+                // Reduce current interval by 5% of its current value
+                enemySpawnIntervalSeconds = Mathf.Max(minEnemySpawnIntervalSeconds, enemySpawnIntervalSeconds * 0.95f);
                 RenderEnemies();
                 return;
             }
@@ -1010,10 +1014,103 @@ public class SnakeGame : MonoBehaviour
                     enemyCells.Add(p);
                     enemyHps.Add(Mathf.Max(1, enemyHpPer));
                     EnsureEnemyObjectForIndex(enemyCells.Count - 1);
+                    // Reduce current interval by 5% of its current value
+                    enemySpawnIntervalSeconds = Mathf.Max(minEnemySpawnIntervalSeconds, enemySpawnIntervalSeconds * 0.95f);
                     RenderEnemies();
                     return;
                 }
             }
+        }
+    }
+
+    private void UpdateEnemyBounce(float timeNow)
+    {
+        if (enemyObjects == null || enemyCells == null) return;
+        float cycle = Mathf.Max(0.05f, enemyBounceCycleSeconds);
+        float tNorm = (cycle > 0f) ? (timeNow % cycle) / cycle : 0f; // 0..1
+        float primaryAmp = Mathf.Max(0f, enemyBounceAmplitudeUnits);
+        float secondaryAmp = Mathf.Max(0f, enemyBounceAmplitudeUnits * Mathf.Clamp01(enemySecondaryBounceScale));
+
+        // Precompute offsets for this timeframe; same for all enemies to keep it subtle
+        float yOffset = EvaluateEnemyBounceOffset(tNorm, primaryAmp, secondaryAmp);
+
+        for (int i = 0; i < enemyObjects.Count && i < enemyCells.Count; i++)
+        {
+            var obj = enemyObjects[i];
+            if (obj == null || !obj.activeSelf) continue;
+            var cell = enemyCells[i];
+            obj.transform.position = new Vector3(cell.x, cell.y + yOffset, 0f);
+        }
+    }
+
+    private float EvaluateEnemyBounceOffset(float tNorm, float primaryAmp, float secondaryAmp)
+    {
+        tNorm = Mathf.Repeat(tNorm, 1f);
+        // Segment durations (sum to 1): quick up, fall, small up, fall
+        float dUp1 = 0.18f;
+        float dDown1 = 0.32f;
+        float dUp2 = 0.16f;
+        float dDown2 = 0.34f;
+
+        if (tNorm < dUp1)
+        {
+            // Fast rise to primaryAmp
+            float u = tNorm / Mathf.Max(0.0001f, dUp1);
+            return primaryAmp * u;
+        }
+        tNorm -= dUp1;
+        if (tNorm < dDown1)
+        {
+            // Fall to ground from primaryAmp
+            float u = tNorm / Mathf.Max(0.0001f, dDown1);
+            return primaryAmp * (1f - u);
+        }
+        tNorm -= dDown1;
+        if (tNorm < dUp2)
+        {
+            // Small rebound
+            float u = tNorm / Mathf.Max(0.0001f, dUp2);
+            return secondaryAmp * u;
+        }
+        tNorm -= dUp2;
+        if (tNorm < dDown2)
+        {
+            // Fall from small rebound back to ground
+            float u = tNorm / Mathf.Max(0.0001f, dDown2);
+            return secondaryAmp * (1f - u);
+        }
+        return 0f;
+    }
+
+    private void UpdateFoodArrowLines()
+    {
+        if (foodCells == null || enemyCells == null || foodArrowContainers == null) return;
+        int n = Mathf.Min(foodCells.Count, foodArrowContainers.Count);
+        for (int i = 0; i < n; i++)
+        {
+            var arrow = foodArrowContainers[i];
+            if (arrow == null) continue;
+            var lr = arrow.GetComponent<LineRenderer>();
+            if (lr == null) { arrow.SetActive(false); continue; }
+
+            int targetIdx = (foodTargetEnemyIndex != null && i < foodTargetEnemyIndex.Count) ? foodTargetEnemyIndex[i] : -1;
+            if (targetIdx < 0 || targetIdx >= enemyCells.Count) { arrow.SetActive(false); continue; }
+
+            var fc = foodCells[i];
+            var ec = enemyCells[targetIdx];
+            int cheb = Mathf.Max(Mathf.Abs(ec.x - fc.x), Mathf.Abs(ec.y - fc.y));
+            if (cheb > 2) { arrow.SetActive(false); continue; }
+
+            Vector3 from = (foodObjects != null && i < foodObjects.Count && foodObjects[i] != null)
+                ? foodObjects[i].transform.position
+                : new Vector3(fc.x, fc.y, 0f);
+            Vector3 to = (enemyObjects != null && targetIdx < enemyObjects.Count && enemyObjects[targetIdx] != null)
+                ? enemyObjects[targetIdx].transform.position
+                : new Vector3(ec.x, ec.y, 0f);
+            arrow.SetActive(true);
+            lr.positionCount = 2;
+            lr.SetPosition(0, from);
+            lr.SetPosition(1, to);
         }
     }
 
