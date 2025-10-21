@@ -564,7 +564,10 @@ public class SnakeGame : MonoBehaviour
             int x = Random.Range(0, gridWidth);
             int y = Random.Range(0, gridHeight);
             var p = new Vector2Int(x, y);
-            if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)))
+            // Do not place food on snake, existing food, or enemy tiles
+            if (!snakeCellSet.Contains(p)
+                && (foodCells == null || !foodCells.Contains(p))
+                && (enemyCells == null || !enemyCells.Contains(p)))
             {
                 foodCells.Add(p);
                 // Ensure there is a visual object for this food
@@ -590,7 +593,9 @@ public class SnakeGame : MonoBehaviour
             for (int xx = 0; xx < gridWidth; xx++)
             {
                 var p = new Vector2Int(xx, yy);
-                if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)))
+                if (!snakeCellSet.Contains(p)
+                    && (foodCells == null || !foodCells.Contains(p))
+                    && (enemyCells == null || !enemyCells.Contains(p)))
                 {
                     foodCells.Add(p);
                     EnsureFoodObjectForIndex(foodCells.Count - 1);
