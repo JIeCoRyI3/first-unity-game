@@ -166,6 +166,9 @@ public class SnakeGame : MonoBehaviour
         UpdateTimersHud();
         // Enemy eating should occur before food movement to avoid instant disappear after move
         UpdateEnemyEating(dt);
+        // Recompute arrow targets every second independently
+        UpdateFoodArrowTargets(dt);
+        // Move food towards enemies at slower cadence
         UpdateEnemyFoodAttraction(dt);
 
         moveTimer += dt;
@@ -908,9 +911,11 @@ public class SnakeGame : MonoBehaviour
             var arrow = new GameObject("FoodArrow");
             arrow.transform.SetParent(renderContainer, false);
             var sr = arrow.AddComponent<SpriteRenderer>();
-            sr.sprite = GenerateDottedArrowSprite();
+            sr.sprite = GenerateDottedLineSprite();
             sr.color = new Color(1f, 1f, 1f, 0.6f);
             sr.sortingOrder = -1; // behind food and snake
+            // hide by default until a valid target within radius 2 is found
+            arrow.SetActive(false);
             foodArrowContainers.Add(arrow);
             if (foodTargetEnemyIndex == null) foodTargetEnemyIndex = new List<int>();
             foodTargetEnemyIndex.Add(-1);
@@ -1279,6 +1284,7 @@ public class SnakeGame : MonoBehaviour
     // ================= Food attraction to enemies & enemy eating =================
     private float foodAttractTimer;
     private float enemyEatTimer;
+    private float arrowCheckTimer;
 
     private void UpdateEnemyFoodAttraction(float dt)
     {
@@ -1291,12 +1297,7 @@ public class SnakeGame : MonoBehaviour
         // Recompute targets (one enemy per food if ties pick one randomly)
         EnsureFoodContainers();
         while (foodTargetEnemyIndex.Count < foodCells.Count) foodTargetEnemyIndex.Add(-1);
-        // Also ensure arrow list matches count
-        if (foodArrowContainers == null) foodArrowContainers = new List<GameObject>();
-        while (foodArrowContainers.Count < foodCells.Count)
-        {
-            EnsureFoodObjectForIndex(foodArrowContainers.Count);
-        }
+        // Do not spawn arrows preemptively; they are created alongside foods but remain hidden by default.
         for (int i = 0; i < foodCells.Count; i++)
         {
             var fc = foodCells[i];
@@ -1437,6 +1438,48 @@ public class SnakeGame : MonoBehaviour
             }
             // only one per enemy per tick
         }
+        RenderFood();
+    }
+
+    private void UpdateFoodArrowTargets(float dt)
+    {
+        if (enemyCells == null || foodCells == null) return;
+        arrowCheckTimer += dt;
+        if (arrowCheckTimer < 1f) return;
+        arrowCheckTimer -= 1f;
+
+        EnsureFoodContainers();
+        while (foodTargetEnemyIndex.Count < foodCells.Count) foodTargetEnemyIndex.Add(-1);
+
+        for (int i = 0; i < foodCells.Count; i++)
+        {
+            var fc = foodCells[i];
+            int bestIdx = -1;
+            int bestCheb = int.MaxValue;
+            int equalCount = 0;
+            for (int e = 0; e < enemyCells.Count; e++)
+            {
+                var ec = enemyCells[e];
+                int cheb = Mathf.Max(Mathf.Abs(ec.x - fc.x), Mathf.Abs(ec.y - fc.y));
+                if (cheb > 2) continue; // only pick a target if within radius 2
+                if (cheb < bestCheb)
+                {
+                    bestCheb = cheb;
+                    bestIdx = e;
+                    equalCount = 1;
+                }
+                else if (cheb == bestCheb)
+                {
+                    equalCount++;
+                    if (Random.Range(0, equalCount) == 0)
+                    {
+                        bestIdx = e;
+                    }
+                }
+            }
+            foodTargetEnemyIndex[i] = bestIdx; // -1 if no nearby enemy
+        }
+        // rendering will toggle arrows accordingly inside RenderFood()
         RenderFood();
     }
 
@@ -1961,41 +2004,23 @@ public class SnakeGame : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
     }
 
-    private Sprite GenerateDottedArrowSprite()
+    private Sprite GenerateDottedLineSprite()
     {
-        // Create a thin dotted line arrow (8x32) pointing up; we'll rotate towards enemy
+        // Thin dotted vertical line (8x32), pivot at bottom center
         int w = 8, h = 32;
         var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-        tex.name = "DottedArrowTexture";
+        tex.name = "DottedLineTexture";
         tex.filterMode = FilterMode.Point;
         Color transparent = new Color(0, 0, 0, 0);
         Color white = Color.white;
         for (int y = 0; y < h; y++)
         {
-            for (int x = 0; x < w; x++)
-            {
-                tex.SetPixel(x, y, transparent);
-            }
+            for (int x = 0; x < w; x++) tex.SetPixel(x, y, transparent);
         }
-        // Dots every 4 pixels, center column 2..5
-        for (int y = 0; y < h - 6; y += 4)
+        for (int y = 0; y < h; y += 4)
         {
-            for (int x = 2; x <= 5; x++) tex.SetPixel(x, y, white);
+            for (int x = 3; x <= 4; x++) tex.SetPixel(x, y, white);
         }
-        // Arrow head (a small triangle at the top)
-        int baseY = h - 6;
-        tex.SetPixel(3, baseY + 0, white);
-        tex.SetPixel(3, baseY + 1, white);
-        tex.SetPixel(2, baseY + 1, white);
-        tex.SetPixel(4, baseY + 1, white);
-        tex.SetPixel(3, baseY + 2, white);
-        tex.SetPixel(2, baseY + 2, white);
-        tex.SetPixel(4, baseY + 2, white);
-        tex.SetPixel(1, baseY + 3, white);
-        tex.SetPixel(5, baseY + 3, white);
-        tex.SetPixel(0, baseY + 4, white);
-        tex.SetPixel(6, baseY + 4, white);
-        tex.SetPixel(3, baseY + 4, white);
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.0f), h, 0, SpriteMeshType.FullRect);
     }
