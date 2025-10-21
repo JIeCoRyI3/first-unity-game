@@ -192,6 +192,8 @@ public class SnakeGame : MonoBehaviour
         UpdateSnakePulse(Time.time);
         // Enemy bounce animation and arrow line update
         UpdateEnemyBounce(Time.time);
+        // Update damage flash coloring for enemies
+        UpdateEnemyDamageFlash(Time.deltaTime);
         UpdateFoodArrowLines();
         
         // Sprite animation
@@ -768,7 +770,8 @@ public class SnakeGame : MonoBehaviour
             Vector2Int dirVec;
             if (isHead)
             {
-                dirVec = currentDirection;
+                // Use nextDirection for immediate visual responsiveness on key press
+                dirVec = nextDirection;
                 go.transform.localRotation = Quaternion.Euler(0f, 0f, GetZRotationForHead(dirVec));
             }
             else
@@ -928,6 +931,8 @@ public class SnakeGame : MonoBehaviour
     private List<Vector2Int> enemyCells;
     private List<int> enemyHps;
     private List<GameObject> enemyObjects;
+    // Damage flash timers per enemy (seconds remaining); aligned with enemyObjects
+    private List<float> enemyFlashTimers;
     private float enemySpawnTimerSeconds;
 
     private bool isEngagedWithEnemy;
@@ -940,6 +945,7 @@ public class SnakeGame : MonoBehaviour
         if (enemyCells == null) enemyCells = new List<Vector2Int>();
         if (enemyHps == null) enemyHps = new List<int>();
         if (enemyObjects == null) enemyObjects = new List<GameObject>();
+        if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
     }
 
     private void ClearEnemies()
@@ -959,6 +965,7 @@ public class SnakeGame : MonoBehaviour
         engagedEnemyIndex = -1;
         engagedEnemyCell = new Vector2Int(-9999, -9999);
         enemyDamageTimer = 0f;
+        if (enemyFlashTimers != null) enemyFlashTimers.Clear();
     }
 
     private void UpdateEnemySpawning(float dt)
@@ -1114,6 +1121,32 @@ public class SnakeGame : MonoBehaviour
         }
     }
 
+    private void UpdateEnemyDamageFlash(float dt)
+    {
+        if (enemyObjects == null || enemyObjects.Count == 0) return;
+        if (enemyFlashTimers == null) return;
+        for (int i = 0; i < enemyObjects.Count && i < enemyFlashTimers.Count; i++)
+        {
+            var obj = enemyObjects[i];
+            if (obj == null || !obj.activeSelf) continue;
+            var sr = obj.GetComponent<SpriteRenderer>();
+            if (sr == null) continue;
+            float t = enemyFlashTimers[i];
+            if (t > 0f)
+            {
+                t = Mathf.Max(0f, t - dt);
+                enemyFlashTimers[i] = t;
+                // Solid semi-transparent red tint while flashing
+                sr.color = new Color(1f, 0.35f, 0.35f, 1f);
+            }
+            else
+            {
+                // Reset to normal
+                sr.color = Color.white;
+            }
+        }
+    }
+
     private void EnsureEnemyObjectForIndex(int index)
     {
         if (renderContainer == null) EnsureRuntimeAssets();
@@ -1126,6 +1159,9 @@ public class SnakeGame : MonoBehaviour
                 sr.color = Color.white;
             }
             enemyObjects.Add(go);
+            // Ensure timer list aligned
+            if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
+            enemyFlashTimers.Add(0f);
         }
     }
 
@@ -1137,6 +1173,9 @@ public class SnakeGame : MonoBehaviour
         {
             EnsureEnemyObjectForIndex(enemyObjects.Count);
         }
+        // Ensure timers list aligned in size
+        if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
+        while (enemyFlashTimers.Count < enemyCells.Count) enemyFlashTimers.Add(0f);
         for (int i = 0; i < enemyObjects.Count; i++)
         {
             bool active = i < enemyCells.Count;
@@ -1172,6 +1211,10 @@ public class SnakeGame : MonoBehaviour
             var go = enemyObjects[index];
             if (go != null) Destroy(go);
             enemyObjects.RemoveAt(index);
+        }
+        if (enemyFlashTimers != null && index < enemyFlashTimers.Count)
+        {
+            enemyFlashTimers.RemoveAt(index);
         }
         // Adjust engaged index if needed
         if (isEngagedWithEnemy)
@@ -1229,6 +1272,13 @@ public class SnakeGame : MonoBehaviour
             if (engagedEnemyIndex >= 0 && engagedEnemyIndex < enemyHps.Count)
             {
                 enemyHps[engagedEnemyIndex] = Mathf.Max(0, enemyHps[engagedEnemyIndex] - 1);
+                // Trigger red damage flash for 0.5s on hit
+                if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
+                while (enemyFlashTimers.Count < enemyObjects.Count) enemyFlashTimers.Add(0f);
+                if (engagedEnemyIndex < enemyFlashTimers.Count)
+                {
+                    enemyFlashTimers[engagedEnemyIndex] = 0.5f;
+                }
                 if (enemyHps[engagedEnemyIndex] <= 0)
                 {
                     // Enemy dies -> remove and resume movement
@@ -2227,7 +2277,7 @@ public class SnakeGame : MonoBehaviour
         var dialogImg = dialog.AddComponent<Image>();
         dialogImg.color = new Color(0.12f, 0.14f, 0.18f, 1f);
         var dialogRT = dialog.GetComponent<RectTransform>();
-        dialogRT.sizeDelta = new Vector2(420, 240);
+        dialogRT.sizeDelta = new Vector2(520, 280);
         dialogRT.anchorMin = new Vector2(0.5f, 0.5f);
         dialogRT.anchorMax = new Vector2(0.5f, 0.5f);
         dialogRT.anchoredPosition = Vector2.zero;
@@ -2252,7 +2302,7 @@ public class SnakeGame : MonoBehaviour
         Button restartBtn = CreateUIButton(dialog.transform, "Restart");
         restartBtn.onClick.AddListener(() => { HideGameOverUI(); StartNewGame(); });
 
-        Button menuBtn = CreateUIButton(dialog.transform, "Menu");
+        Button menuBtn = CreateUIButton(dialog.transform, "Back to menu");
         menuBtn.onClick.AddListener(() => { HideGameOverUI(); SceneManager.LoadScene("Menu"); });
     }
 
@@ -2262,6 +2312,7 @@ public class SnakeGame : MonoBehaviour
         go.transform.SetParent(parent, false);
         var img = go.AddComponent<Image>();
         img.color = new Color(0.18f, 0.22f, 0.28f, 1f);
+        img.sprite = cellSprite;
         var btn = go.AddComponent<Button>();
         var colors = btn.colors;
         colors.normalColor = img.color;
@@ -2271,14 +2322,17 @@ public class SnakeGame : MonoBehaviour
         btn.colors = colors;
 
         var rt = go.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(300, 68);
+        rt.sizeDelta = new Vector2(360, 80);
+        var le = go.AddComponent<LayoutElement>();
+        le.minWidth = 360f;
+        le.minHeight = 72f;
 
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(go.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = label;
         t.font = PixelFontProvider.Get();
-        t.fontSize = 32;
+        t.fontSize = 40;
         t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 1f, 1f);

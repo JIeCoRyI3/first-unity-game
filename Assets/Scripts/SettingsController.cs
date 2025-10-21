@@ -293,6 +293,8 @@ public class SettingsController : MonoBehaviour
         btnGO.transform.SetParent(parent, false);
         var image = btnGO.AddComponent<Image>();
         image.color = new Color(0.15f, 0.18f, 0.22f, 1f);
+        // Ensure consistent UI rendering
+        image.sprite = GetUnitSprite();
 
         var btn = btnGO.AddComponent<Button>();
         var colors = btn.colors;
@@ -303,14 +305,19 @@ public class SettingsController : MonoBehaviour
         btn.colors = colors;
 
         var rt = btnGO.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(280, 64);
+        rt.sizeDelta = new Vector2(360, 80);
+
+        // Prevent layout from shrinking the button and keep text visible
+        var le = btnGO.AddComponent<LayoutElement>();
+        le.minWidth = 360f;
+        le.minHeight = 72f;
 
         var textGO = new GameObject("Text");
         textGO.transform.SetParent(btnGO.transform, false);
         var t = textGO.AddComponent<Text>();
         t.text = text;
         t.font = PixelFontProvider.Get();
-        t.fontSize = 42;
+        t.fontSize = 48;
         t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(0.9f, 0.95f, 0.9f, 1f);
