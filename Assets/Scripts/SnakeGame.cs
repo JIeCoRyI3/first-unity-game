@@ -2591,6 +2591,10 @@ public class SnakeGame : MonoBehaviour
 
         Button menuBtn = CreateUIButton(dialog.transform, "Back to menu");
         menuBtn.onClick.AddListener(() => { HideGameOverUI(); SceneManager.LoadScene("Menu"); });
+
+        // Keyboard / mouse navigation with outline in Game Over dialog
+        var nav = dialog.AddComponent<LevelUpController>();
+        nav.Initialize(new System.Collections.Generic.List<UnityEngine.UI.Button> { restartBtn, menuBtn });
     }
 
     private Button CreateUIButton(Transform parent, string label)

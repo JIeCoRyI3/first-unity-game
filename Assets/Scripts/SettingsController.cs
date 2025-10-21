@@ -222,6 +222,20 @@ public class SettingsController : MonoBehaviour
             if (s.GetComponentInParent<Canvas>() != null) selectables.Add(s);
         }
         selectedIndex = Mathf.Clamp(selectedIndex, 0, Mathf.Max(0, selectables.Count - 1));
+        // Hover moves selection to hovered element
+        foreach (var s in selectables)
+        {
+            var img = s.targetGraphic as Image;
+            if (img == null) img = s.GetComponent<Image>();
+            if (img == null) continue;
+            var et = img.gameObject.GetComponent<EventTrigger>();
+            if (et == null) et = img.gameObject.AddComponent<EventTrigger>();
+            var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            entry.callback = new EventTrigger.TriggerEvent();
+            int idx = selectables.IndexOf(s);
+            entry.callback.AddListener((_) => { selectedIndex = idx; UpdateSelectionVisuals(); });
+            et.triggers.Add(entry);
+        }
     }
 
     private void Update()

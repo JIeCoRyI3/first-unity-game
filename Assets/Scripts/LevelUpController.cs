@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using UnityEngine.Events;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -9,12 +11,29 @@ public class LevelUpController : MonoBehaviour
 {
     private List<Button> buttons;
     private int selectedIndex;
+    private bool isKeyboardMode;
 
     public void Initialize(List<Button> buttons)
     {
         this.buttons = buttons ?? new List<Button>();
         selectedIndex = Mathf.Clamp(selectedIndex, 0, Mathf.Max(0, this.buttons.Count - 1));
+        // Bind hover to move selection by mouse
+        for (int i = 0; i < this.buttons.Count; i++)
+        {
+            BindPointerEnter(this.buttons[i], i);
+        }
         UpdateVisuals();
+    }
+
+    private void BindPointerEnter(Button btn, int index)
+    {
+        if (btn == null) return;
+        var et = btn.gameObject.GetComponent<EventTrigger>();
+        if (et == null) et = btn.gameObject.AddComponent<EventTrigger>();
+        var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+        entry.callback = new EventTrigger.TriggerEvent();
+        entry.callback.AddListener((_) => { isKeyboardMode = false; SetSelectedIndex(index); });
+        et.triggers.Add(entry);
     }
 
     private void Update()
@@ -26,29 +45,29 @@ public class LevelUpController : MonoBehaviour
         {
             if (kb.upArrowKey.wasPressedThisFrame)
             {
-                MoveSelection(-1);
+                isKeyboardMode = true; MoveSelection(-1);
             }
             else if (kb.downArrowKey.wasPressedThisFrame)
             {
-                MoveSelection(1);
+                isKeyboardMode = true; MoveSelection(1);
             }
             else if (kb.enterKey.wasPressedThisFrame)
             {
-                ActivateSelected();
+                isKeyboardMode = true; ActivateSelected();
             }
         }
 #else
         if (Input.GetKeyDown(KeyCode.UpArrow))
         {
-            MoveSelection(-1);
+            isKeyboardMode = true; MoveSelection(-1);
         }
         else if (Input.GetKeyDown(KeyCode.DownArrow))
         {
-            MoveSelection(1);
+            isKeyboardMode = true; MoveSelection(1);
         }
         else if (Input.GetKeyDown(KeyCode.Return))
         {
-            ActivateSelected();
+            isKeyboardMode = true; ActivateSelected();
         }
 #endif
     }
@@ -96,6 +115,12 @@ public class LevelUpController : MonoBehaviour
             }
             btn.colors = colors;
         }
+    }
+
+    private void SetSelectedIndex(int index)
+    {
+        selectedIndex = Mathf.Clamp(index, 0, Mathf.Max(0, buttons.Count - 1));
+        UpdateVisuals();
     }
 
     private void ActivateSelected()

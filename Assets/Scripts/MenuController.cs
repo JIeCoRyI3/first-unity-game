@@ -120,6 +120,19 @@ public class MenuController : MonoBehaviour
         // Keep order as in hierarchy under the menu panel
         buttons.Sort((a,b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
         selectedIndex = Mathf.Clamp(selectedIndex, 0, Mathf.Max(0, buttons.Count - 1));
+        // Pointer hover sets selection to hovered
+        for (int i = 0; i < buttons.Count; i++)
+        {
+            var btn = buttons[i];
+            if (btn == null) continue;
+            var et = btn.gameObject.GetComponent<EventTrigger>();
+            if (et == null) et = btn.gameObject.AddComponent<EventTrigger>();
+            var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            entry.callback = new EventTrigger.TriggerEvent();
+            int idx = i;
+            entry.callback.AddListener((_) => { selectedIndex = idx; UpdateSelectionVisuals(); });
+            et.triggers.Add(entry);
+        }
     }
 
     private Button CreateButton(Transform parent, string text)
