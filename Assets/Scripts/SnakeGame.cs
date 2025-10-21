@@ -70,6 +70,9 @@ public class SnakeGame : MonoBehaviour
     private readonly List<GameObject> backgroundTiles = new List<GameObject>();
     private readonly List<GameObject> segmentObjects = new List<GameObject>();
     private readonly List<SpriteRenderer> segmentSpriteRenderers = new List<SpriteRenderer>();
+    // Corner rounding overlays (one per segment)
+    private readonly List<GameObject> cornerMaskObjects = new List<GameObject>();
+    private readonly List<SpriteRenderer> cornerMaskRenderers = new List<SpriteRenderer>();
     // Food rendering (now supports multiple food items)
     private GameObject foodObject; // legacy (unused in multi-food mode)
     private List<Vector2Int> foodCells;
@@ -86,6 +89,7 @@ public class SnakeGame : MonoBehaviour
     private bool foodNeedsSprite;
     private GameObject gameOverCanvasGO;
     private Material lineMaterial;
+    private Sprite cornerMaskSprite;
 
     // Progression / Roguelike
     [Header("Roguelike Progression")]
@@ -143,6 +147,10 @@ public class SnakeGame : MonoBehaviour
     private AudioClip sfxTurn;
     private AudioClip sfxEat;
     private AudioClip sfxDeath;
+    private AudioClip sfxHit;
+
+    [Header("Snake Visual Tweaks")]
+    [SerializeField, Tooltip("Tail segment scale factor (0..1)")] private float tailScaleFactor = 0.7f;
 
     private void Start()
     {
@@ -199,8 +207,10 @@ public class SnakeGame : MonoBehaviour
             moveTimer -= moveIntervalSeconds;
             StepGame();
         }
-        // Continuous visual updates (pulsations)
+        // Continuous visual updates
         UpdateFoodPulse(Time.time);
+        // Update sprite frames first so pulse/tail scaling applies after
+        UpdateSpriteAnimations(dt);
         UpdateSnakePulse(Time.time);
         // Enemy bounce animation and arrow line update
         UpdateEnemyBounce(Time.time);
@@ -208,8 +218,7 @@ public class SnakeGame : MonoBehaviour
         UpdateEnemyDamageFlash(Time.deltaTime);
         UpdateFoodArrowLines();
         
-        // Sprite animation
-        UpdateSpriteAnimations(dt);
+        // (Sprite frames were updated earlier this frame)
     }
 
     private void SetupCamera()
@@ -272,6 +281,11 @@ public class SnakeGame : MonoBehaviour
 
         BuildBackgroundGrid();
         BuildBorders();
+
+        if (cornerMaskSprite == null)
+        {
+            cornerMaskSprite = GenerateCornerMaskSprite(16);
+        }
     }
 
     private void LoadSnakeSpriteSheets()
@@ -385,41 +399,41 @@ public class SnakeGame : MonoBehaviour
         var kb = Keyboard.current;
         if (kb != null)
         {
-            if (kb.upArrowKey.wasPressedThisFrame)
+            if (kb.upArrowKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame)
             {
                 TrySetNextDirection(Vector2Int.up);
                 return;
             }
-            if (kb.downArrowKey.wasPressedThisFrame)
+            if (kb.downArrowKey.wasPressedThisFrame || kb.sKey.wasPressedThisFrame)
             {
                 TrySetNextDirection(Vector2Int.down);
                 return;
             }
-            if (kb.leftArrowKey.wasPressedThisFrame)
+            if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame)
             {
                 TrySetNextDirection(Vector2Int.left);
                 return;
             }
-            if (kb.rightArrowKey.wasPressedThisFrame)
+            if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame)
             {
                 TrySetNextDirection(Vector2Int.right);
                 return;
             }
         }
 #else
-        if (Input.GetKeyDown(KeyCode.UpArrow))
+        if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
         {
             TrySetNextDirection(Vector2Int.up);
         }
-        else if (Input.GetKeyDown(KeyCode.DownArrow))
+        else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
         {
             TrySetNextDirection(Vector2Int.down);
         }
-        else if (Input.GetKeyDown(KeyCode.LeftArrow))
+        else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
         {
             TrySetNextDirection(Vector2Int.left);
         }
-        else if (Input.GetKeyDown(KeyCode.RightArrow))
+        else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
             TrySetNextDirection(Vector2Int.right);
         }
@@ -699,6 +713,21 @@ public class SnakeGame : MonoBehaviour
                 releaseSeconds: 0.35f
             );
         }
+
+        if (sfxHit == null)
+        {
+            // Sharp mid tone, slight down for hit
+            sfxHit = CreateToneClip(
+                name: "sfx_hit",
+                durationSeconds: 0.08f,
+                startFrequencyHz: 680f,
+                endFrequencyHz: 560f,
+                gain: 0.6f,
+                waveform: Waveform.Square,
+                attackSeconds: 0.001f,
+                releaseSeconds: 0.06f
+            );
+        }
     }
 
     private void PlaySfx(AudioClip clip, float volume = 1f)
@@ -776,45 +805,85 @@ public class SnakeGame : MonoBehaviour
             }
         }
 
-        // Position and color segments
-        int index = 0;
-        Vector2Int? prevCell = null;
-        foreach (var cell in snakeCells)
+        // Copy cells into list for indexed neighbor access
+        var cells = new List<Vector2Int>(snakeCells);
+        int n = cells.Count;
+        for (int i = 0; i < n; i++)
         {
-            var go = segmentObjects[index];
+            var cell = cells[i];
+            var go = segmentObjects[i];
             go.SetActive(true);
             go.transform.position = new Vector3(cell.x, cell.y, 0f);
-            var sr = segmentSpriteRenderers[index];
+            var sr = segmentSpriteRenderers[i];
+
+            bool isHead = (i == 0);
+            bool isTail = (i == n - 1);
+
             // Choose head/body sprite frame
-            bool isHead = (index == 0);
             Sprite desiredSprite = isHead ? GetHeadFrame() : GetBodyFrame();
             if (desiredSprite == null) desiredSprite = snakeSprite;
             sr.sprite = desiredSprite;
-            // Base color; per-frame scale via UpdateSnakePulse
             sr.color = Color.white;
-            // Ensure scaling so the sprite fits exactly 1x1 world units
             ApplySpriteUniformScale(go.transform, desiredSprite);
 
             // Rotation per segment based on direction
             Vector2Int dirVec;
             if (isHead)
             {
-                // Use nextDirection for immediate visual responsiveness on key press
                 dirVec = nextDirection;
                 go.transform.localRotation = Quaternion.Euler(0f, 0f, GetZRotationForHead(dirVec));
             }
             else
             {
-                dirVec = prevCell.HasValue ? (prevCell.Value - cell) : Vector2Int.up;
+                var prev = cells[i - 1];
+                dirVec = prev - cell;
                 go.transform.localRotation = Quaternion.Euler(0f, 0f, GetZRotationForBody(dirVec));
             }
-            prevCell = cell;
-            index++;
+
+            // Tail immediate scale baseline (will be finalized in UpdateSnakePulse)
+            if (isTail)
+            {
+                go.transform.localScale = new Vector3(tailScaleFactor, tailScaleFactor, 1f);
+            }
+
+            // Corner rounding overlay
+            EnsureCornerMaskForIndex(i);
+            var cornerGO = cornerMaskObjects[i];
+            var cornerSR = cornerMaskRenderers[i];
+            if (!isHead && !isTail)
+            {
+                var toHead = cells[i - 1] - cell;
+                var toTail = cells[i + 1] - cell;
+                bool isCorner = toHead != toTail && toHead != -toTail;
+                if (isCorner && cornerMaskSprite != null)
+                {
+                    cornerGO.SetActive(true);
+                    cornerSR.sprite = cornerMaskSprite;
+                    // Match checkerboard tile color beneath this cell so overlay hides snake corner
+                    bool even = (((cell.x + cell.y) & 1) == 0);
+                    cornerSR.color = even ? gridColorLight : gridColorDark;
+                    cornerGO.transform.position = new Vector3(cell.x, cell.y, 0f);
+                    float zRot = GetCornerRotation(toTail, toHead);
+                    cornerGO.transform.localRotation = Quaternion.Euler(0f, 0f, zRot);
+                    ApplySpriteUniformScale(cornerGO.transform, cornerMaskSprite);
+                    // Ensure it renders above the snake segment
+                    cornerSR.sortingOrder = 1;
+                }
+                else
+                {
+                    cornerGO.SetActive(false);
+                }
+            }
+            else
+            {
+                cornerGO.SetActive(false);
+            }
         }
-        // Disable any extras (and keep arrow lists aligned)
-        for (int i = index; i < segmentObjects.Count; i++)
+        // Disable any extras beyond active length
+        for (int i = n; i < segmentObjects.Count; i++)
         {
             segmentObjects[i].SetActive(false);
+            if (i < cornerMaskObjects.Count) cornerMaskObjects[i].SetActive(false);
         }
 
         RenderFood();
@@ -832,6 +901,17 @@ public class SnakeGame : MonoBehaviour
             sr.sprite = snakeSprite;
             segmentObjects.Add(go);
             segmentSpriteRenderers.Add(sr);
+
+            // Corner mask overlay GO aligned with segment index
+            var corner = CreateCellGO("SnakeCorner", Color.white, cornerMaskSprite != null ? cornerMaskSprite : cellSprite);
+            var csr = corner.GetComponent<SpriteRenderer>();
+            if (csr == null) csr = corner.AddComponent<SpriteRenderer>();
+            csr.sprite = cornerMaskSprite != null ? cornerMaskSprite : cellSprite;
+            csr.color = new Color(0f, 0f, 0f, 1f);
+            csr.sortingOrder = 1; // above snake
+            corner.SetActive(false);
+            cornerMaskObjects.Add(corner);
+            cornerMaskRenderers.Add(csr);
         }
     }
 
@@ -882,26 +962,31 @@ public class SnakeGame : MonoBehaviour
     private void UpdateSnakePulse(float timeNow)
     {
         if (segmentObjects == null || segmentObjects.Count == 0) return;
-        if (snakePulseWaveStartTimes == null || snakePulseWaveStartTimes.Count == 0) return;
+        int lastActiveIndex = Mathf.Max(0, (snakeCells != null ? snakeCells.Count - 1 : 0));
+        bool hasWaves = snakePulseWaveStartTimes != null && snakePulseWaveStartTimes.Count > 0;
         for (int i = 0; i < segmentObjects.Count; i++)
         {
             var seg = segmentObjects[i];
             if (seg == null || !seg.activeSelf) continue;
-            float baseScale = 1f;
+            bool isTail = (i == lastActiveIndex);
+            float baseScale = isTail ? Mathf.Clamp01(tailScaleFactor) : 1f;
             float scale = baseScale;
             // Sum contributions from all active waves; each wave starts at head with per-segment delay
             // We store multiple wave start times by pushing new entries; reuse same list, interpret as wave origins
             // To support multiple overlapping waves, we keep a small ring by clamping size (optional)
-            for (int w = 0; w < snakePulseWaveStartTimes.Count; w++)
+            if (hasWaves)
             {
-                float t0 = snakePulseWaveStartTimes[w];
-                if (t0 <= -9000f) continue;
-                float localT = timeNow - t0 - (i * snakePulseDelayPerSegment);
-                if (localT >= 0f && localT <= snakePulseDuration)
+                for (int w = 0; w < snakePulseWaveStartTimes.Count; w++)
                 {
-                    // Simple ease: sin pulse 0..pi over duration
-                    float phase = Mathf.PI * (localT / snakePulseDuration);
-                    scale += Mathf.Sin(phase) * snakePulseAmplitude;
+                    float t0 = snakePulseWaveStartTimes[w];
+                    if (t0 <= -9000f) continue;
+                    float localT = timeNow - t0 - (i * snakePulseDelayPerSegment);
+                    if (localT >= 0f && localT <= snakePulseDuration)
+                    {
+                        // Simple ease: sin pulse 0..pi over duration
+                        float phase = Mathf.PI * (localT / snakePulseDuration);
+                        scale += Mathf.Sin(phase) * snakePulseAmplitude;
+                    }
                 }
             }
             // Cap extreme stacking
@@ -1301,6 +1386,8 @@ public class SnakeGame : MonoBehaviour
             if (engagedEnemyIndex >= 0 && engagedEnemyIndex < enemyHps.Count)
             {
                 enemyHps[engagedEnemyIndex] = Mathf.Max(0, enemyHps[engagedEnemyIndex] - 1);
+                // Play hit SFX on each damage tick
+                PlaySfx(sfxHit, 1f);
                 // Trigger red damage flash for 0.4s on hit
                 if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
                 while (enemyFlashTimers.Count < enemyObjects.Count) enemyFlashTimers.Add(0f);
@@ -2239,6 +2326,35 @@ public class SnakeGame : MonoBehaviour
         return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.0f), h, 0, SpriteMeshType.FullRect);
     }
 
+    private Sprite GenerateCornerMaskSprite(int size)
+    {
+        // Quarter-circle mask in the top-right quadrant with pivot at center,
+        // so placing at cell center and rotating positions it into any corner.
+        int s = Mathf.Max(8, size);
+        var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+        tex.name = "CornerMaskTexture";
+        tex.filterMode = FilterMode.Point;
+        Color transparent = new Color(0, 0, 0, 0);
+        Color solid = Color.white; // color will be overridden per-cell (to grid color)
+        Vector2 center = new Vector2((s - 1) * 0.5f, (s - 1) * 0.5f);
+        float radius = s * 0.5f;
+        for (int y = 0; y < s; y++)
+        {
+            for (int x = 0; x < s; x++)
+            {
+                float dx = x - center.x;
+                float dy = y - center.y;
+                // top-right quadrant relative to center
+                bool inQuad = (x >= center.x && y >= center.y);
+                float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                bool inside = inQuad && dist <= radius;
+                tex.SetPixel(x, y, inside ? solid : transparent);
+            }
+        }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), s, 0, SpriteMeshType.FullRect);
+    }
+
     private Sprite GenerateSolidCircleSprite(int size, Color fill, Color border)
     {
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -2316,6 +2432,41 @@ public class SnakeGame : MonoBehaviour
 
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
+    }
+
+    private void EnsureCornerMaskForIndex(int index)
+    {
+        while (cornerMaskObjects.Count <= index)
+        {
+            var corner = CreateCellGO("SnakeCorner", Color.white, cornerMaskSprite != null ? cornerMaskSprite : cellSprite);
+            var sr = corner.GetComponent<SpriteRenderer>();
+            if (sr == null) sr = corner.AddComponent<SpriteRenderer>();
+            sr.sprite = cornerMaskSprite != null ? cornerMaskSprite : cellSprite;
+            sr.color = Color.black;
+            sr.sortingOrder = 1;
+            corner.SetActive(false);
+            cornerMaskObjects.Add(corner);
+            cornerMaskRenderers.Add(sr);
+        }
+    }
+
+    private float GetCornerRotation(Vector2Int fromTail, Vector2Int toHead)
+    {
+        // Determine which corner arc to draw for a turn from 'fromTail' to 'toHead'
+        // We constructed the mask in bottom-left origin quadrant; choose rotation so the rounded arc
+        // sits on the exterior of the turn.
+        // Map the four L-turn combinations to rotations (degrees):
+        // Right->Up : 0, Up->Right : 180, Right->Down : 270, Down->Right : 90,
+        // Left->Up : 90, Up->Left : 270, Left->Down : 180, Down->Left : 0
+        if (fromTail == Vector2Int.right && toHead == Vector2Int.up) return 0f;
+        if (fromTail == Vector2Int.up && toHead == Vector2Int.right) return 180f;
+        if (fromTail == Vector2Int.right && toHead == Vector2Int.down) return 270f;
+        if (fromTail == Vector2Int.down && toHead == Vector2Int.right) return 90f;
+        if (fromTail == Vector2Int.left && toHead == Vector2Int.up) return 90f;
+        if (fromTail == Vector2Int.up && toHead == Vector2Int.left) return 270f;
+        if (fromTail == Vector2Int.left && toHead == Vector2Int.down) return 180f;
+        if (fromTail == Vector2Int.down && toHead == Vector2Int.left) return 0f;
+        return 0f;
     }
 
     private void ShowGameOverUI()
