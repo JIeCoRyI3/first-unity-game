@@ -2456,23 +2456,25 @@ public class SnakeGame : MonoBehaviour
         // We constructed the mask in bottom-left origin quadrant; choose rotation so the rounded arc
         // sits on the exterior of the turn.
         // Map the four L-turn combinations to rotations (degrees) for OUTER wedge mask.
-        // Fixed: swap Left->Up and Right->Down assignments.
+        // Swap pairs per user request:
+        // - Up->Right with Down->Left
+        // - Left->Up with Right->Down
         // Right->Up : 0
         if (fromTail == Vector2Int.right && toHead == Vector2Int.up) return 0f;
-        // Up->Right : 180
-        if (fromTail == Vector2Int.up && toHead == Vector2Int.right) return 180f;
-        // Right->Down : 90 (was 270)
-        if (fromTail == Vector2Int.right && toHead == Vector2Int.down) return 90f;
-        // Down->Right : 270 (was 90)
+        // Up->Right : 0 (swapped from 180)
+        if (fromTail == Vector2Int.up && toHead == Vector2Int.right) return 0f;
+        // Right->Down : 270 (swapped from 90)
+        if (fromTail == Vector2Int.right && toHead == Vector2Int.down) return 270f;
+        // Down->Right : 270 (unchanged)
         if (fromTail == Vector2Int.down && toHead == Vector2Int.right) return 270f;
-        // Left->Up : 270 (was 90)
-        if (fromTail == Vector2Int.left && toHead == Vector2Int.up) return 270f;
-        // Up->Left : 90 (was 270)
+        // Left->Up : 90 (swapped from 270)
+        if (fromTail == Vector2Int.left && toHead == Vector2Int.up) return 90f;
+        // Up->Left : 90 (unchanged)
         if (fromTail == Vector2Int.up && toHead == Vector2Int.left) return 90f;
-        // Left->Down : 180
+        // Left->Down : 180 (unchanged)
         if (fromTail == Vector2Int.left && toHead == Vector2Int.down) return 180f;
-        // Down->Left : 0
-        if (fromTail == Vector2Int.down && toHead == Vector2Int.left) return 0f;
+        // Down->Left : 180 (swapped from 0)
+        if (fromTail == Vector2Int.down && toHead == Vector2Int.left) return 180f;
         return 0f;
     }
 
