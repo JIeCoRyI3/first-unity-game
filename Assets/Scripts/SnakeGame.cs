@@ -23,6 +23,12 @@ public class SnakeGame : MonoBehaviour
     [SerializeField, Tooltip("Snake body color")] private Color bodyColor = new Color(0.2f, 0.7f, 0.25f);
     [SerializeField, Tooltip("Food color")] private Color foodColor = new Color(0.9f, 0.2f, 0.2f);
 
+    [Header("Enemies")]
+    [SerializeField, Tooltip("Seconds between enemy spawns")] private float enemySpawnIntervalSeconds = 30f;
+    [SerializeField, Tooltip("Damage tick interval while colliding with enemy")] private float enemyDamageIntervalSeconds = 0.5f;
+    [SerializeField, Tooltip("HP per enemy")] private int enemyHpPer = 5;
+    [SerializeField, Tooltip("Enemy tint color")] private Color enemyColor = new Color(0.9f, 0.25f, 0.85f, 1f);
+
     [Header("Visuals")]
     [SerializeField, Tooltip("Border color")] private Color borderColor = new Color(0.85f, 0.85f, 0.95f);
     [SerializeField, Tooltip("Border thickness in world units")] private float borderThickness = 0.12f;
@@ -83,6 +89,10 @@ public class SnakeGame : MonoBehaviour
     private GameObject hudCanvasGO;
     private Image xpFillImage;
     private Text xpText;
+    
+    // HUD (timers & enemy spawn progress)
+    private Text gameTimeText;
+    private Image enemySpawnFillImage;
 
     // Level-up modal
     private GameObject levelUpCanvasGO;
@@ -144,6 +154,12 @@ public class SnakeGame : MonoBehaviour
         }
 
         float dt = Time.deltaTime;
+        // Timers and background systems (not paused)
+        UpdateEnemySpawning(dt);
+        UpdateEngagementDamage(dt);
+        totalPlayTimeSeconds += dt;
+        UpdateTimersHud();
+
         moveTimer += dt;
         if (moveTimer >= moveIntervalSeconds)
         {
@@ -271,6 +287,14 @@ public class SnakeGame : MonoBehaviour
         snakePulseWaveStartTimes = new List<float>();
         foodPulsePhaseOffsets = new List<float>();
 
+        // Reset timers & enemy engagement state
+        totalPlayTimeSeconds = 0f;
+        enemySpawnTimerSeconds = 0f;
+        isEngagedWithEnemy = false;
+        engagedEnemyIndex = -1;
+        engagedEnemyCell = new Vector2Int(-9999, -9999);
+        enemyDamageTimer = 0f;
+
         // Reset progression
         playerLevel = 1;
         currentXp = 0;
@@ -294,6 +318,10 @@ public class SnakeGame : MonoBehaviour
         maxFoodCount = 1;
         EnsureFoodContainers();
         EnsureFoodCount();
+
+        // Reset enemies
+        ClearEnemies();
+        EnsureEnemyContainers();
         RenderWorld(fullRebuild: true);
 
         // Hide any previous game over UI
@@ -378,6 +406,21 @@ public class SnakeGame : MonoBehaviour
         var currentHead = snakeCells.First.Value;
         var nextHead = currentHead + currentDirection;
 
+        // If currently engaged with an enemy, only resume movement if we are not facing into the same enemy cell anymore
+        if (isEngagedWithEnemy)
+        {
+            if (nextHead == engagedEnemyCell)
+            {
+                // Still facing the enemy: do not move this tick
+                return;
+            }
+            // Player changed intent: disengage and proceed normally
+            isEngagedWithEnemy = false;
+            engagedEnemyIndex = -1;
+            engagedEnemyCell = new Vector2Int(-9999, -9999);
+            enemyDamageTimer = 0f;
+        }
+
         bool outOfBounds = nextHead.x < 0 || nextHead.x >= gridWidth || nextHead.y < 0 || nextHead.y >= gridHeight;
         int eatenFoodIndex = -1;
         bool willGrow = false;
@@ -411,6 +454,17 @@ public class SnakeGame : MonoBehaviour
         {
             PlaySfx(sfxDeath, 1f);
             GameOver();
+            return;
+        }
+
+        // Check enemy collision: if moving into an enemy, stop movement and start damage over time
+        int enemyIndex = IndexOfEnemyAtCell(nextHead);
+        if (enemyIndex >= 0)
+        {
+            isEngagedWithEnemy = true;
+            engagedEnemyIndex = enemyIndex;
+            engagedEnemyCell = enemyCells[enemyIndex];
+            // Movement halts; damage ticks handled by UpdateEngagementDamage
             return;
         }
 
@@ -702,6 +756,7 @@ public class SnakeGame : MonoBehaviour
         }
 
         RenderFood();
+        RenderEnemies();
     }
 
     private void EnsureSegmentObjects(int countToAdd)
@@ -801,6 +856,231 @@ public class SnakeGame : MonoBehaviour
         {
             var go = CreateCellGO("Food", Color.white, cellSprite);
             foodObjects.Add(go);
+        }
+    }
+
+    // ===================== Enemies =====================
+    private List<Vector2Int> enemyCells;
+    private List<int> enemyHps;
+    private List<GameObject> enemyObjects;
+    private float enemySpawnTimerSeconds;
+
+    private bool isEngagedWithEnemy;
+    private int engagedEnemyIndex;
+    private Vector2Int engagedEnemyCell;
+    private float enemyDamageTimer;
+
+    private void EnsureEnemyContainers()
+    {
+        if (enemyCells == null) enemyCells = new List<Vector2Int>();
+        if (enemyHps == null) enemyHps = new List<int>();
+        if (enemyObjects == null) enemyObjects = new List<GameObject>();
+    }
+
+    private void ClearEnemies()
+    {
+        if (enemyObjects != null)
+        {
+            for (int i = 0; i < enemyObjects.Count; i++)
+            {
+                var go = enemyObjects[i];
+                if (go != null) Destroy(go);
+            }
+            enemyObjects.Clear();
+        }
+        if (enemyCells != null) enemyCells.Clear();
+        if (enemyHps != null) enemyHps.Clear();
+        isEngagedWithEnemy = false;
+        engagedEnemyIndex = -1;
+        engagedEnemyCell = new Vector2Int(-9999, -9999);
+        enemyDamageTimer = 0f;
+    }
+
+    private void UpdateEnemySpawning(float dt)
+    {
+        if (!isAlive) return;
+        if (enemySpawnIntervalSeconds <= 0f) return;
+        enemySpawnTimerSeconds += dt;
+        while (enemySpawnTimerSeconds >= enemySpawnIntervalSeconds)
+        {
+            enemySpawnTimerSeconds -= enemySpawnIntervalSeconds;
+            SpawnEnemy();
+        }
+        // Update HUD progress each frame
+        UpdateTimersHud();
+    }
+
+    private void SpawnEnemy()
+    {
+        EnsureEnemyContainers();
+        int maxCells = gridWidth * gridHeight;
+        int occupied = snakeCellSet.Count + (foodCells?.Count ?? 0) + (enemyCells?.Count ?? 0);
+        if (occupied >= maxCells)
+        {
+            // No free space -> do nothing
+            return;
+        }
+
+        for (int safety = 0; safety < 10000; safety++)
+        {
+            int x = Random.Range(0, gridWidth);
+            int y = Random.Range(0, gridHeight);
+            var p = new Vector2Int(x, y);
+            if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)) && (enemyCells == null || !enemyCells.Contains(p)))
+            {
+                enemyCells.Add(p);
+                enemyHps.Add(Mathf.Max(1, enemyHpPer));
+                EnsureEnemyObjectForIndex(enemyCells.Count - 1);
+                RenderEnemies();
+                return;
+            }
+        }
+
+        // Fallback scan
+        for (int yy = 0; yy < gridHeight; yy++)
+        {
+            for (int xx = 0; xx < gridWidth; xx++)
+            {
+                var p = new Vector2Int(xx, yy);
+                if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)) && (enemyCells == null || !enemyCells.Contains(p)))
+                {
+                    enemyCells.Add(p);
+                    enemyHps.Add(Mathf.Max(1, enemyHpPer));
+                    EnsureEnemyObjectForIndex(enemyCells.Count - 1);
+                    RenderEnemies();
+                    return;
+                }
+            }
+        }
+    }
+
+    private void EnsureEnemyObjectForIndex(int index)
+    {
+        if (renderContainer == null) EnsureRuntimeAssets();
+        while (enemyObjects.Count <= index)
+        {
+            var go = CreateCellGO("Enemy", enemyColor, cellSprite);
+            var sr = go.GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                sr.color = enemyColor;
+            }
+            enemyObjects.Add(go);
+        }
+    }
+
+    private void RenderEnemies()
+    {
+        if (enemyCells == null || enemyObjects == null) return;
+        // Ensure enough objects
+        while (enemyObjects.Count < enemyCells.Count)
+        {
+            EnsureEnemyObjectForIndex(enemyObjects.Count);
+        }
+        for (int i = 0; i < enemyObjects.Count; i++)
+        {
+            bool active = i < enemyCells.Count;
+            var obj = enemyObjects[i];
+            if (obj == null) continue;
+            obj.SetActive(active);
+            if (active)
+            {
+                var pos = enemyCells[i];
+                obj.transform.position = new Vector3(pos.x, pos.y, 0f);
+                obj.transform.localScale = Vector3.one;
+            }
+        }
+    }
+
+    private int IndexOfEnemyAtCell(Vector2Int cell)
+    {
+        if (enemyCells == null) return -1;
+        for (int i = 0; i < enemyCells.Count; i++)
+        {
+            if (enemyCells[i] == cell) return i;
+        }
+        return -1;
+    }
+
+    private void KillEnemyAtIndex(int index)
+    {
+        if (index < 0 || index >= (enemyCells?.Count ?? 0)) return;
+        enemyCells.RemoveAt(index);
+        enemyHps.RemoveAt(index);
+        if (enemyObjects != null && index < enemyObjects.Count)
+        {
+            var go = enemyObjects[index];
+            if (go != null) Destroy(go);
+            enemyObjects.RemoveAt(index);
+        }
+        // Adjust engaged index if needed
+        if (isEngagedWithEnemy)
+        {
+            if (engagedEnemyIndex == index)
+            {
+                isEngagedWithEnemy = false;
+                engagedEnemyIndex = -1;
+                engagedEnemyCell = new Vector2Int(-9999, -9999);
+                enemyDamageTimer = 0f;
+            }
+            else if (engagedEnemyIndex > index)
+            {
+                engagedEnemyIndex--;
+            }
+        }
+        RenderEnemies();
+    }
+
+    private void UpdateEngagementDamage(float dt)
+    {
+        if (!isAlive) return;
+        if (!isEngagedWithEnemy) return;
+        if (engagedEnemyIndex < 0 || engagedEnemyIndex >= (enemyCells?.Count ?? 0))
+        {
+            // Enemy vanished; disengage
+            isEngagedWithEnemy = false;
+            engagedEnemyIndex = -1;
+            engagedEnemyCell = new Vector2Int(-9999, -9999);
+            enemyDamageTimer = 0f;
+            return;
+        }
+
+        enemyDamageTimer += dt;
+        while (enemyDamageTimer >= enemyDamageIntervalSeconds)
+        {
+            enemyDamageTimer -= enemyDamageIntervalSeconds;
+
+            // Lose one tail segment
+            if (snakeCells.Count > 0)
+            {
+                var tail = snakeCells.Last.Value;
+                snakeCells.RemoveLast();
+                snakeCellSet.Remove(tail);
+                if (snakeCells.Count <= 2)
+                {
+                    // After losing this segment, 2 or fewer parts remain -> defeat
+                    PlaySfx(sfxDeath, 1f);
+                    GameOver();
+                    return;
+                }
+            }
+
+            // Deal 1 damage to the engaged enemy
+            if (engagedEnemyIndex >= 0 && engagedEnemyIndex < enemyHps.Count)
+            {
+                enemyHps[engagedEnemyIndex] = Mathf.Max(0, enemyHps[engagedEnemyIndex] - 1);
+                if (enemyHps[engagedEnemyIndex] <= 0)
+                {
+                    // Enemy dies -> remove and resume movement
+                    KillEnemyAtIndex(engagedEnemyIndex);
+                    // Render snake after tail loss
+                    RenderWorld(fullRebuild: false);
+                    return;
+                }
+            }
+
+            // Render snake after tail loss
+            RenderWorld(fullRebuild: false);
         }
     }
 
@@ -1149,6 +1429,51 @@ public class SnakeGame : MonoBehaviour
         hudCanvasGO = canvasGO;
         xpFillImage = fillImg;
         xpText = text;
+
+        // Game Time text under XP bar (top-left)
+        var timeGO = new GameObject("GameTime");
+        timeGO.transform.SetParent(canvasGO.transform, false);
+        var timeText = timeGO.AddComponent<Text>();
+        timeText.font = PixelFontProvider.Get();
+        timeText.fontSize = 24;
+        timeText.fontStyle = FontStyle.Bold;
+        timeText.alignment = TextAnchor.UpperLeft;
+        timeText.color = new Color(0.9f, 0.95f, 1f, 1f);
+        var timeRT = timeGO.GetComponent<RectTransform>();
+        timeRT.anchorMin = new Vector2(0f, 1f);
+        timeRT.anchorMax = new Vector2(0f, 1f);
+        timeRT.pivot = new Vector2(0f, 1f);
+        timeRT.sizeDelta = new Vector2(240, 28);
+        timeRT.anchoredPosition = new Vector2(10, -40);
+        gameTimeText = timeText;
+
+        // Enemy spawn progress bar under XP bar (top-right)
+        var enemyBarGO = new GameObject("EnemySpawnBar");
+        enemyBarGO.transform.SetParent(canvasGO.transform, false);
+        var enemyBarBG = enemyBarGO.AddComponent<Image>();
+        enemyBarBG.color = new Color(0.08f, 0.1f, 0.14f, 0.9f);
+        enemyBarBG.sprite = cellSprite;
+        var enemyBarRT = enemyBarGO.GetComponent<RectTransform>();
+        enemyBarRT.anchorMin = new Vector2(1f, 1f);
+        enemyBarRT.anchorMax = new Vector2(1f, 1f);
+        enemyBarRT.pivot = new Vector2(1f, 1f);
+        enemyBarRT.sizeDelta = new Vector2(140, 18);
+        enemyBarRT.anchoredPosition = new Vector2(-10, -42);
+
+        var enemyFillGO = new GameObject("Fill");
+        enemyFillGO.transform.SetParent(enemyBarGO.transform, false);
+        var enemyFillImg = enemyFillGO.AddComponent<Image>();
+        enemyFillImg.color = new Color(1.0f, 0.35f, 0.8f, 0.95f);
+        enemyFillImg.type = Image.Type.Filled;
+        enemyFillImg.fillMethod = Image.FillMethod.Horizontal;
+        enemyFillImg.fillOrigin = (int)Image.OriginHorizontal.Left;
+        enemyFillImg.sprite = cellSprite;
+        var enemyFillRT = enemyFillGO.GetComponent<RectTransform>();
+        enemyFillRT.anchorMin = new Vector2(0f, 0f);
+        enemyFillRT.anchorMax = new Vector2(1f, 1f);
+        enemyFillRT.offsetMin = new Vector2(2, 2);
+        enemyFillRT.offsetMax = new Vector2(-2, -2);
+        enemySpawnFillImage = enemyFillImg;
     }
 
     private void UpdateHud()
@@ -1157,6 +1482,32 @@ public class SnakeGame : MonoBehaviour
         float fill = (xpToNext > 0) ? Mathf.Clamp01(currentXp / (float)xpToNext) : 0f;
         if (xpFillImage != null) xpFillImage.fillAmount = fill;
         if (xpText != null) xpText.text = $"Lv. {playerLevel}  XP {currentXp}/{xpToNext}";
+    }
+
+    private float totalPlayTimeSeconds;
+
+    private void UpdateTimersHud()
+    {
+        if (hudCanvasGO == null) return;
+        // Time text
+        if (gameTimeText != null)
+        {
+            gameTimeText.text = $"Time {FormatTime(totalPlayTimeSeconds)}";
+        }
+        // Enemy spawn progress
+        if (enemySpawnFillImage != null && enemySpawnIntervalSeconds > 0f)
+        {
+            float p = Mathf.Clamp01(enemySpawnTimerSeconds / Mathf.Max(0.0001f, enemySpawnIntervalSeconds));
+            enemySpawnFillImage.fillAmount = p;
+        }
+    }
+
+    private string FormatTime(float seconds)
+    {
+        int total = Mathf.Max(0, Mathf.FloorToInt(seconds));
+        int mins = total / 60;
+        int secs = total % 60;
+        return $"{mins:00}:{secs:00}";
     }
 
     private void ShowLevelUpUI()
