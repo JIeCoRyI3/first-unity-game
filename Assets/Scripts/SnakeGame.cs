@@ -826,15 +826,17 @@ public class SnakeGame : MonoBehaviour
                         if (targetIdx >= 0 && enemyCells != null && targetIdx < enemyCells.Count)
                         {
                             var enemyPos = enemyCells[targetIdx];
-                            Vector2 from = new Vector2(pos.x + 0.5f, pos.y + 0.5f);
-                            Vector2 to = new Vector2(enemyPos.x + 0.5f, enemyPos.y + 0.5f);
+                            Vector3 from = foodObjects[i] != null ? foodObjects[i].transform.position : new Vector3(pos.x, pos.y, 0f);
+                            Vector3 to = (enemyObjects != null && targetIdx < enemyObjects.Count && enemyObjects[targetIdx] != null)
+                                ? enemyObjects[targetIdx].transform.position
+                                : new Vector3(enemyPos.x, enemyPos.y, 0f);
                             var lr = arrow.GetComponent<LineRenderer>();
                             if (lr != null)
                             {
                                 arrow.SetActive(true);
                                 lr.positionCount = 2;
-                                lr.SetPosition(0, new Vector3(from.x, from.y, 0f));
-                                lr.SetPosition(1, new Vector3(to.x, to.y, 0f));
+                                lr.SetPosition(0, from);
+                                lr.SetPosition(1, to);
                             }
                             else
                             {
