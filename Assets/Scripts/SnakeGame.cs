@@ -2452,21 +2452,24 @@ public class SnakeGame : MonoBehaviour
 
     private float GetCornerRotation(Vector2Int fromTail, Vector2Int toHead)
     {
-        // Determine which corner arc to draw for a turn from 'fromTail' to 'toHead'.
-        // We now intentionally choose the OPPOSITE corner wedge for every turn.
-        float rot;
-        if (fromTail == Vector2Int.right && toHead == Vector2Int.up) rot = 0f;          // Right -> Up
-        else if (fromTail == Vector2Int.up && toHead == Vector2Int.right) rot = 180f;   // Up -> Right
-        else if (fromTail == Vector2Int.right && toHead == Vector2Int.down) rot = 90f;  // Right -> Down
-        else if (fromTail == Vector2Int.down && toHead == Vector2Int.right) rot = 270f; // Down -> Right
-        else if (fromTail == Vector2Int.left && toHead == Vector2Int.up) rot = 270f;    // Left -> Up
-        else if (fromTail == Vector2Int.up && toHead == Vector2Int.left) rot = 90f;     // Up -> Left
-        else if (fromTail == Vector2Int.left && toHead == Vector2Int.down) rot = 180f;  // Left -> Down
-        else if (fromTail == Vector2Int.down && toHead == Vector2Int.left) rot = 0f;    // Down -> Left
-        else rot = 0f;
-        // Flip to opposite corner
-        rot = (rot + 180f) % 360f;
-        return rot;
+        // Choose wedge quadrant based on turn handedness:
+        // - Clockwise (right turn): use outer corner aligned with (fromTail + toHead)
+        // - Counter-clockwise (left turn): use the opposite corner (-(fromTail + toHead))
+        int cross = (fromTail.x * toHead.y) - (fromTail.y * toHead.x); // >0 => CCW, <0 => CW
+        Vector2Int sum = fromTail + toHead; // one of (±1, ±1)
+        int qx = sum.x >= 0 ? 1 : -1;
+        int qy = sum.y >= 0 ? 1 : -1;
+        if (cross > 0)
+        {
+            // CCW: use opposite corner
+            qx = -qx; qy = -qy;
+        }
+        // Map quadrant to rotation where 0° is top-right corner in our sprite
+        if (qx == 1 && qy == 1) return 0f;      // top-right
+        if (qx == -1 && qy == 1) return 90f;    // top-left
+        if (qx == -1 && qy == -1) return 180f;  // bottom-left
+        if (qx == 1 && qy == -1) return 270f;   // bottom-right
+        return 0f;
     }
 
     private void ShowGameOverUI()
