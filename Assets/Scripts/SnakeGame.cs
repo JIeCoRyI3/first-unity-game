@@ -384,7 +384,6 @@ public class SnakeGame : MonoBehaviour
         pendingLevelUps = 0;
         snakePulseWaveStartTimes = new List<float>();
         foodPulsePhaseOffsets = new List<float>();
-        bufferedDirections.Clear();
 
         // Reset timers & enemy engagement state
         totalPlayTimeSeconds = 0f;
@@ -603,30 +602,10 @@ public class SnakeGame : MonoBehaviour
     }
 
     // Consume one buffered direction (if any) for this tick.
-    // "Последний выигрывает": берем самый поздний валидный поворот в текущем окне.
     private void ApplyQueuedDirectionForThisStep()
     {
-        if (bufferedDirections.Count == 0) return;
-
-        // Take the most recent input from current window
-        int lastIdx = bufferedDirections.Count - 1;
-        var desired = bufferedDirections[lastIdx];
-        bufferedDirections.Clear(); // consume current window entirely for this step
-
-        // Ensure no 180° reversal relative to current direction (runtime safety)
-        if (desired + currentDirection == Vector2Int.zero)
-        {
-            return;
-        }
-
-        nextDirection = desired;
-
-        // Move staged next-window inputs into current window for upcoming frames
-        if (bufferedDirectionsNext.Count > 0)
-        {
-            bufferedDirections.AddRange(bufferedDirectionsNext);
-            bufferedDirectionsNext.Clear();
-        }
+        // Single-slot buffering now handled by nextDirection directly. No-op.
+        return;
     }
 
     
