@@ -53,7 +53,7 @@ public class SnakeGame : MonoBehaviour
     private Vector2Int nextDirection;
 
     [Header("Input")]
-    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 3;
+    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 2;
     // Oldest-first buffer; enables rapid alternation ("staircase") without losing inputs
     private readonly List<Vector2Int> bufferedDirections = new List<Vector2Int>(8);
 
@@ -116,9 +116,7 @@ public class SnakeGame : MonoBehaviour
     private Text gameTimeText;
     private Image enemySpawnFillImage;
 
-    // HUD (input queue display)
-    private GameObject inputQueuePanelGO;
-    private readonly List<Text> inputQueueArrowsText = new List<Text>();
+    // (Input queue HUD removed)
 
     // Pre-start countdown overlay
     private GameObject countdownOverlayGO;
@@ -447,25 +445,21 @@ public class SnakeGame : MonoBehaviour
             if (kb.upArrowKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame)
             {
                 QueueDirectionInput(Vector2Int.up);
-                UpdateInputQueueUI();
                 return;
             }
             if (kb.downArrowKey.wasPressedThisFrame || kb.sKey.wasPressedThisFrame)
             {
                 QueueDirectionInput(Vector2Int.down);
-                UpdateInputQueueUI();
                 return;
             }
             if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame)
             {
                 QueueDirectionInput(Vector2Int.left);
-                UpdateInputQueueUI();
                 return;
             }
             if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame)
             {
                 QueueDirectionInput(Vector2Int.right);
-                UpdateInputQueueUI();
                 return;
             }
         }
@@ -473,22 +467,18 @@ public class SnakeGame : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
         {
             QueueDirectionInput(Vector2Int.up);
-            UpdateInputQueueUI();
         }
         else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
         {
             QueueDirectionInput(Vector2Int.down);
-            UpdateInputQueueUI();
         }
         else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
         {
             QueueDirectionInput(Vector2Int.left);
-            UpdateInputQueueUI();
         }
         else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
             QueueDirectionInput(Vector2Int.right);
-            UpdateInputQueueUI();
         }
 #endif
     }
@@ -625,7 +615,6 @@ public class SnakeGame : MonoBehaviour
         }
 
         RenderWorld(fullRebuild: false);
-        UpdateInputQueueUI();
     }
 
     // Consume one buffered direction (if any) for this tick.
@@ -650,37 +639,7 @@ public class SnakeGame : MonoBehaviour
         nextDirection = desired;
     }
 
-    private void UpdateInputQueueUI()
-    {
-        if (inputQueuePanelGO == null) return;
-        // Map vectors to arrow glyphs
-        string ToGlyph(Vector2Int d)
-        {
-            if (d == Vector2Int.up) return "↑";
-            if (d == Vector2Int.down) return "↓";
-            if (d == Vector2Int.left) return "←";
-            if (d == Vector2Int.right) return "→";
-            return "";
-        }
-
-        int slots = inputQueueArrowsText.Count;
-        for (int i = 0; i < slots; i++)
-        {
-            var label = inputQueueArrowsText[i];
-            if (label == null) continue;
-            if (i < bufferedDirections.Count)
-            {
-                // Oldest at top (index 0)
-                label.text = ToGlyph(bufferedDirections[i]);
-                label.color = new Color(0.95f, 0.98f, 1f, 1f);
-            }
-            else
-            {
-                label.text = "·"; // dot for empty
-                label.color = new Color(0.85f, 0.9f, 1f, 0.6f);
-            }
-        }
-    }
+    
 
     private void SpawnFood()
     {
@@ -2195,56 +2154,7 @@ public class SnakeGame : MonoBehaviour
         countdownText = cText;
         countdownOverlayGO.SetActive(false);
 
-        // Input queue panel (left side of playfield)
-        var inputPanel = new GameObject("InputQueuePanel");
-        inputPanel.transform.SetParent(canvasGO.transform, false);
-        var inputBG = inputPanel.AddComponent<Image>();
-        inputBG.color = new Color(0.06f, 0.08f, 0.12f, 0.7f);
-        inputBG.sprite = cellSprite;
-        var inputRT = inputPanel.GetComponent<RectTransform>();
-        inputRT.anchorMin = new Vector2(0f, 0.5f);
-        inputRT.anchorMax = new Vector2(0f, 0.5f);
-        inputRT.pivot = new Vector2(0f, 0.5f);
-        inputRT.sizeDelta = new Vector2(96, 120);
-        inputRT.anchoredPosition = new Vector2(10, 0);
-
-        var vLayout = inputPanel.AddComponent<VerticalLayoutGroup>();
-        vLayout.childAlignment = TextAnchor.MiddleCenter;
-        vLayout.spacing = 6f;
-        vLayout.padding = new RectOffset(8, 8, 8, 8);
-        vLayout.childControlHeight = true;
-        vLayout.childForceExpandHeight = false;
-
-        // Title
-        var titleGO = new GameObject("Title");
-        titleGO.transform.SetParent(inputPanel.transform, false);
-        var title = titleGO.AddComponent<Text>();
-        title.font = PixelFontProvider.Get();
-        title.fontSize = 18;
-        title.alignment = TextAnchor.MiddleCenter;
-        title.color = new Color(0.85f, 0.9f, 1f, 0.9f);
-        title.text = "INPUT";
-        var titleRT = titleGO.GetComponent<RectTransform>();
-        titleRT.sizeDelta = new Vector2(0, 20);
-
-        // Arrow slots (maxBufferedDirections)
-        inputQueueArrowsText.Clear();
-        for (int i = 0; i < Mathf.Max(1, maxBufferedDirections); i++)
-        {
-            var slot = new GameObject($"Arrow_{i}");
-            slot.transform.SetParent(inputPanel.transform, false);
-            var t = slot.AddComponent<Text>();
-            t.font = PixelFontProvider.Get();
-            t.fontSize = 28;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.color = new Color(0.9f, 0.95f, 1f, 1f);
-            t.text = "";
-            var rt = t.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(60, 28);
-            inputQueueArrowsText.Add(t);
-        }
-
-        inputQueuePanelGO = inputPanel;
+        // (Input queue panel removed)
     }
 
     private void UpdateHud()
