@@ -53,7 +53,7 @@ public class SnakeGame : MonoBehaviour
     private Vector2Int nextDirection;
 
     [Header("Input")]
-    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 2;
+    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 4;
     // Oldest-first buffer; enables rapid alternation ("staircase") without losing inputs
     private readonly List<Vector2Int> bufferedDirections = new List<Vector2Int>(8);
 
@@ -502,13 +502,16 @@ public class SnakeGame : MonoBehaviour
         // Avoid redundant duplicate entries
         if (bufferedDirections.Count > 0 && bufferedDirections[bufferedDirections.Count - 1] == desired) return;
 
-        // Keep buffer small and responsive: prefer most recent intents
-        if (bufferedDirections.Count >= Mathf.Max(1, maxBufferedDirections))
+        int cap = Mathf.Max(1, maxBufferedDirections);
+        // Input Overwrite: if full, overwrite the most recent queued action
+        if (bufferedDirections.Count >= cap)
         {
-            // Drop the oldest to retain the latest inputs for responsiveness
-            bufferedDirections.RemoveAt(0);
+            bufferedDirections[bufferedDirections.Count - 1] = desired;
         }
-        bufferedDirections.Add(desired);
+        else
+        {
+            bufferedDirections.Add(desired);
+        }
 
         // Update preview direction immediately so head orientation reflects latest intent
         nextDirection = desired;
