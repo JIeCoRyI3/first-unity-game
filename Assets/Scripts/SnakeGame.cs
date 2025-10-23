@@ -52,6 +52,9 @@ public class SnakeGame : MonoBehaviour
     private Vector2Int currentDirection; // unit vector: up/down/left/right
     private Vector2Int nextDirection;
 
+    [Header("Input")]
+    // Single-slot buffer: we simply store nextDirection on KeyDown
+
     private Vector2Int foodCell;
     private bool isAlive;
     private bool isPaused;
@@ -110,6 +113,8 @@ public class SnakeGame : MonoBehaviour
     // HUD (timers & enemy spawn progress)
     private Text gameTimeText;
     private Image enemySpawnFillImage;
+
+    // (Input queue HUD removed)
 
     // Pre-start countdown overlay
     private GameObject countdownOverlayGO;
@@ -202,7 +207,8 @@ public class SnakeGame : MonoBehaviour
         UpdateEnemyFoodAttraction(dt);
 
         moveTimer += dt;
-        if (moveTimer >= moveIntervalSeconds)
+        // Process all due steps to avoid dropped moves on slow frames
+        while (moveTimer >= moveIntervalSeconds)
         {
             moveTimer -= moveIntervalSeconds;
             StepGame();
@@ -484,19 +490,18 @@ public class SnakeGame : MonoBehaviour
 #endif
     }
 
-    private void TrySetNextDirection(Vector2Int desired)
+    private void QueueDirectionInput(Vector2Int desired)
     {
-        // Prevent reversing into yourself (180° turn) based on current direction
-        if (desired + currentDirection == Vector2Int.zero)
-        {
-            return;
-        }
+        // Only KeyDown is used by callers; here we gate invalids and set nextDirection directly (single-slot buffer)
+        if (desired + currentDirection == Vector2Int.zero) return; // ignore 180°
+        if (desired == nextDirection) return; // ignore duplicate
         nextDirection = desired;
     }
 
     private void StepGame()
     {
-        // Apply buffered direction exactly on tick
+        // Apply exactly one direction from the current window; last one has priority
+        ApplyQueuedDirectionForThisStep();
         bool turnedThisStep = currentDirection != nextDirection;
         currentDirection = nextDirection;
 
@@ -595,6 +600,15 @@ public class SnakeGame : MonoBehaviour
 
         RenderWorld(fullRebuild: false);
     }
+
+    // Consume one buffered direction (if any) for this tick.
+    private void ApplyQueuedDirectionForThisStep()
+    {
+        // Single-slot buffering now handled by nextDirection directly. No-op.
+        return;
+    }
+
+    
 
     private void SpawnFood()
     {
@@ -2108,6 +2122,8 @@ public class SnakeGame : MonoBehaviour
         countdownOverlayGO = overlay;
         countdownText = cText;
         countdownOverlayGO.SetActive(false);
+
+        // (Input queue panel removed)
     }
 
     private void UpdateHud()
