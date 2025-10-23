@@ -53,12 +53,7 @@ public class SnakeGame : MonoBehaviour
     private Vector2Int nextDirection;
 
     [Header("Input")]
-    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 2;
-    [SerializeField, Range(0f, 1f), Tooltip("Fraction of step time to accept inputs for current step")] private float inputDeadlineFraction = 0.85f;
-    // Current and next input windows within the movement cadence
-    private readonly List<Vector2Int> bufferedDirections = new List<Vector2Int>(8); // current window
-    private readonly List<Vector2Int> bufferedDirectionsNext = new List<Vector2Int>(8); // next window
-    private float lastStepTime;
+    // Single-slot buffer: we simply store nextDirection on KeyDown
 
     private Vector2Int foodCell;
     private bool isAlive;
@@ -217,7 +212,6 @@ public class SnakeGame : MonoBehaviour
         {
             moveTimer -= moveIntervalSeconds;
             StepGame();
-            lastStepTime = Time.time;
         }
         // Continuous visual updates
         UpdateFoodPulse(Time.time);
@@ -448,41 +442,41 @@ public class SnakeGame : MonoBehaviour
         {
             if (kb.upArrowKey.wasPressedThisFrame || kb.wKey.wasPressedThisFrame)
             {
-                QueueDirectionInput(Vector2Int.up);
+                TrySetNextDirection(Vector2Int.up);
                 return;
             }
             if (kb.downArrowKey.wasPressedThisFrame || kb.sKey.wasPressedThisFrame)
             {
-                QueueDirectionInput(Vector2Int.down);
+                TrySetNextDirection(Vector2Int.down);
                 return;
             }
             if (kb.leftArrowKey.wasPressedThisFrame || kb.aKey.wasPressedThisFrame)
             {
-                QueueDirectionInput(Vector2Int.left);
+                TrySetNextDirection(Vector2Int.left);
                 return;
             }
             if (kb.rightArrowKey.wasPressedThisFrame || kb.dKey.wasPressedThisFrame)
             {
-                QueueDirectionInput(Vector2Int.right);
+                TrySetNextDirection(Vector2Int.right);
                 return;
             }
         }
 #else
         if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
         {
-            QueueDirectionInput(Vector2Int.up);
+            TrySetNextDirection(Vector2Int.up);
         }
         else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
         {
-            QueueDirectionInput(Vector2Int.down);
+            TrySetNextDirection(Vector2Int.down);
         }
         else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
         {
-            QueueDirectionInput(Vector2Int.left);
+            TrySetNextDirection(Vector2Int.left);
         }
         else if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
-            QueueDirectionInput(Vector2Int.right);
+            TrySetNextDirection(Vector2Int.right);
         }
 #endif
     }
@@ -499,36 +493,10 @@ public class SnakeGame : MonoBehaviour
 
     private void QueueDirectionInput(Vector2Int desired)
     {
-        // Determine current movement baseline to block 180° reversals relative to actual movement
-        Vector2Int baseline = currentDirection;
-        if (desired + baseline == Vector2Int.zero) return; // block 180°
-
-        // Ignore exact duplicate of last queued intent in its respective window
-        // Decide which window to write into based on deadline within the current step
-        float deadline = inputDeadlineFraction * Mathf.Max(0.0001f, moveIntervalSeconds);
-        float elapsedSinceLastStep = Time.time - lastStepTime;
-        bool writeToCurrentWindow = elapsedSinceLastStep <= deadline;
-
-        var window = writeToCurrentWindow ? bufferedDirections : bufferedDirectionsNext;
-        int cap = Mathf.Max(1, maxBufferedDirections);
-
-        if (window.Count > 0 && window[window.Count - 1] == desired) return; // ignore duplicate
-
-        // Input Overwrite policy: keep window size <= cap; if full, overwrite the most recent
-        if (window.Count >= cap)
-        {
-            window[window.Count - 1] = desired; // overwrite last (most recent)
-        }
-        else
-        {
-            window.Add(desired);
-        }
-
-        // Preview head orientation to latest intent if it applies to current window
-        if (writeToCurrentWindow)
-        {
-            nextDirection = desired;
-        }
+        // Only KeyDown is used by callers; here we gate invalids and set nextDirection directly (single-slot buffer)
+        if (desired + currentDirection == Vector2Int.zero) return; // ignore 180°
+        if (desired == nextDirection) return; // ignore duplicate
+        nextDirection = desired;
     }
 
     private void StepGame()
