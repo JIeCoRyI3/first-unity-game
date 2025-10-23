@@ -53,9 +53,12 @@ public class SnakeGame : MonoBehaviour
     private Vector2Int nextDirection;
 
     [Header("Input")]
-    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 4;
-    // Oldest-first buffer; enables rapid alternation ("staircase") without losing inputs
-    private readonly List<Vector2Int> bufferedDirections = new List<Vector2Int>(8);
+    [SerializeField, Tooltip("Max buffered direction inputs for tight turns")] private int maxBufferedDirections = 2;
+    [SerializeField, Range(0f, 1f), Tooltip("Fraction of step time to accept inputs for current step")] private float inputDeadlineFraction = 0.85f;
+    // Current and next input windows within the movement cadence
+    private readonly List<Vector2Int> bufferedDirections = new List<Vector2Int>(8); // current window
+    private readonly List<Vector2Int> bufferedDirectionsNext = new List<Vector2Int>(8); // next window
+    private float lastStepTime;
 
     private Vector2Int foodCell;
     private bool isAlive;
@@ -214,6 +217,7 @@ public class SnakeGame : MonoBehaviour
         {
             moveTimer -= moveIntervalSeconds;
             StepGame();
+            lastStepTime = Time.time;
         }
         // Continuous visual updates
         UpdateFoodPulse(Time.time);
@@ -495,31 +499,41 @@ public class SnakeGame : MonoBehaviour
 
     private void QueueDirectionInput(Vector2Int desired)
     {
-        // Determine baseline: last enqueued direction (if any) or the current movement direction
-        Vector2Int baseline = bufferedDirections.Count > 0 ? bufferedDirections[bufferedDirections.Count - 1] : currentDirection;
-        // Block immediate 180° reversals relative to baseline to avoid self-collisions
-        if (desired + baseline == Vector2Int.zero) return;
-        // Avoid redundant duplicate entries
-        if (bufferedDirections.Count > 0 && bufferedDirections[bufferedDirections.Count - 1] == desired) return;
+        // Determine current movement baseline to block 180° reversals relative to actual movement
+        Vector2Int baseline = currentDirection;
+        if (desired + baseline == Vector2Int.zero) return; // block 180°
 
+        // Ignore exact duplicate of last queued intent in its respective window
+        // Decide which window to write into based on deadline within the current step
+        float deadline = inputDeadlineFraction * Mathf.Max(0.0001f, moveIntervalSeconds);
+        float elapsedSinceLastStep = Time.time - lastStepTime;
+        bool writeToCurrentWindow = elapsedSinceLastStep <= deadline;
+
+        var window = writeToCurrentWindow ? bufferedDirections : bufferedDirectionsNext;
         int cap = Mathf.Max(1, maxBufferedDirections);
-        // Input Overwrite: if full, overwrite the most recent queued action
-        if (bufferedDirections.Count >= cap)
+
+        if (window.Count > 0 && window[window.Count - 1] == desired) return; // ignore duplicate
+
+        // Input Overwrite policy: keep window size <= cap; if full, overwrite the most recent
+        if (window.Count >= cap)
         {
-            bufferedDirections[bufferedDirections.Count - 1] = desired;
+            window[window.Count - 1] = desired; // overwrite last (most recent)
         }
         else
         {
-            bufferedDirections.Add(desired);
+            window.Add(desired);
         }
 
-        // Update preview direction immediately so head orientation reflects latest intent
-        nextDirection = desired;
+        // Preview head orientation to latest intent if it applies to current window
+        if (writeToCurrentWindow)
+        {
+            nextDirection = desired;
+        }
     }
 
     private void StepGame()
     {
-        // Apply at most one queued direction exactly on this tick (oldest first)
+        // Apply exactly one direction from the current window; last one has priority
         ApplyQueuedDirectionForThisStep();
         bool turnedThisStep = currentDirection != nextDirection;
         currentDirection = nextDirection;
@@ -621,17 +635,15 @@ public class SnakeGame : MonoBehaviour
     }
 
     // Consume one buffered direction (if any) for this tick.
-    // This enables tight double-turns across consecutive ticks and preserves player intent.
+    // "Последний выигрывает": берем самый поздний валидный поворот в текущем окне.
     private void ApplyQueuedDirectionForThisStep()
     {
-        if (bufferedDirections.Count == 0)
-        {
-            return;
-        }
+        if (bufferedDirections.Count == 0) return;
 
-        // Consume oldest desired direction
-        var desired = bufferedDirections[0];
-        bufferedDirections.RemoveAt(0);
+        // Take the most recent input from current window
+        int lastIdx = bufferedDirections.Count - 1;
+        var desired = bufferedDirections[lastIdx];
+        bufferedDirections.Clear(); // consume current window entirely for this step
 
         // Ensure no 180° reversal relative to current direction (runtime safety)
         if (desired + currentDirection == Vector2Int.zero)
@@ -640,6 +652,13 @@ public class SnakeGame : MonoBehaviour
         }
 
         nextDirection = desired;
+
+        // Move staged next-window inputs into current window for upcoming frames
+        if (bufferedDirectionsNext.Count > 0)
+        {
+            bufferedDirections.AddRange(bufferedDirectionsNext);
+            bufferedDirectionsNext.Clear();
+        }
     }
 
     
