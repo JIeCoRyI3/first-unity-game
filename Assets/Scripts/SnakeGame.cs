@@ -51,6 +51,9 @@ public class SnakeGame : MonoBehaviour
 
     private Vector2Int currentDirection; // unit vector: up/down/left/right
     private Vector2Int nextDirection;
+    // Single-action input buffer so players can queue one extra turn
+    private bool hasQueuedDirection;
+    private Vector2Int queuedDirection;
 
     private Vector2Int foodCell;
     private bool isAlive;
@@ -406,6 +409,8 @@ public class SnakeGame : MonoBehaviour
 
         currentDirection = Vector2Int.right;
         nextDirection = currentDirection;
+        hasQueuedDirection = false;
+        queuedDirection = currentDirection;
 
         // Reset foods
         ClearFoods();
@@ -486,19 +491,41 @@ public class SnakeGame : MonoBehaviour
 
     private void TrySetNextDirection(Vector2Int desired)
     {
-        // Prevent reversing into yourself (180° turn) based on current direction
+        // Disallow immediate 180° reversal relative to the current direction
         if (desired + currentDirection == Vector2Int.zero)
         {
             return;
         }
-        nextDirection = desired;
+
+        // If there is no pending turn this tick, stage it as the next direction
+        if (nextDirection == currentDirection)
+        {
+            nextDirection = desired;
+            return;
+        }
+
+        // Otherwise we already have a staged turn for this tick; allow one queued turn for the following tick
+        if (!hasQueuedDirection)
+        {
+            // Validate the queued turn relative to the direction that will become current after this tick
+            if (desired + nextDirection == Vector2Int.zero)
+            {
+                return;
+            }
+            hasQueuedDirection = true;
+            queuedDirection = desired;
+        }
     }
 
     private void StepGame()
     {
-        // Apply buffered direction exactly on tick
+        // Apply staged direction exactly on tick
         bool turnedThisStep = currentDirection != nextDirection;
         currentDirection = nextDirection;
+        // Capture and clear queued turn so it can be applied for the next tick
+        Vector2Int queuedForNextStep = queuedDirection;
+        bool hadQueuedDirectionForNextStep = hasQueuedDirection;
+        hasQueuedDirection = false;
 
         var currentHead = snakeCells.First.Value;
         var nextHead = currentHead + currentDirection;
@@ -509,6 +536,10 @@ public class SnakeGame : MonoBehaviour
             if (nextHead == engagedEnemyCell)
             {
                 // Still facing the enemy: do not move this tick
+                if (hadQueuedDirectionForNextStep)
+                {
+                    nextDirection = queuedForNextStep;
+                }
                 return;
             }
             // Player changed intent: disengage and proceed normally
@@ -551,6 +582,10 @@ public class SnakeGame : MonoBehaviour
         {
             PlaySfx(sfxDeath, 1f);
             GameOver();
+            if (hadQueuedDirectionForNextStep)
+            {
+                nextDirection = queuedForNextStep;
+            }
             return;
         }
 
@@ -562,6 +597,10 @@ public class SnakeGame : MonoBehaviour
             engagedEnemyIndex = enemyIndex;
             engagedEnemyCell = enemyCells[enemyIndex];
             // Movement halts; damage ticks handled by UpdateEngagementDamage
+            if (hadQueuedDirectionForNextStep)
+            {
+                nextDirection = queuedForNextStep;
+            }
             return;
         }
 
@@ -591,6 +630,12 @@ public class SnakeGame : MonoBehaviour
             {
                 PlaySfx(sfxMove, 1f);
             }
+        }
+
+        // Stage queued turn for the next tick (after this move has been applied)
+        if (hadQueuedDirectionForNextStep)
+        {
+            nextDirection = queuedForNextStep;
         }
 
         RenderWorld(fullRebuild: false);
