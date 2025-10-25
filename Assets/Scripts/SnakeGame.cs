@@ -86,6 +86,7 @@ public class SnakeGame : MonoBehaviour
     private Sprite cellSprite;
     private Sprite snakeSprite;
     private Sprite enemySprite;
+    private Sprite randomEnemySprite;
     private Sprite[] bodyFrames;
     private Sprite[] headFrames;
     private Sprite[] foodSprites;
@@ -277,6 +278,10 @@ public class SnakeGame : MonoBehaviour
         {
             enemySprite = GenerateScaryEnemySprite();
         }
+        if (randomEnemySprite == null)
+        {
+            randomEnemySprite = GenerateRandomEnemySprite();
+        }
         if (foodSprites == null || foodSprites.Length != 5)
         {
             foodSprites = GenerateFoodSprites();
@@ -391,6 +396,7 @@ public class SnakeGame : MonoBehaviour
         engagedEnemyIndex = -1;
         engagedEnemyCell = new Vector2Int(-9999, -9999);
         enemyDamageTimer = 0f;
+        randomWalkerStepParity = 0;
 
         // Reset progression
         playerLevel = 1;
@@ -529,6 +535,13 @@ public class SnakeGame : MonoBehaviour
 
         var currentHead = snakeCells.First.Value;
         var nextHead = currentHead + currentDirection;
+
+        // Move special enemies (RandomWalker) at half speed: one step every two snake ticks
+        if ((randomWalkerStepParity & 1) == 0)
+        {
+            UpdateRandomWalkerEnemies();
+        }
+        randomWalkerStepParity++;
 
         // If currently engaged with an enemy, only resume movement if we are not facing into the same enemy cell anymore
         if (isEngagedWithEnemy)
@@ -1124,6 +1137,8 @@ public class SnakeGame : MonoBehaviour
     private List<Vector2Int> enemyCells;
     private List<int> enemyHps;
     private List<GameObject> enemyObjects;
+    private enum EnemyType { Default, RandomWalker }
+    private List<EnemyType> enemyTypes;
     // Damage flash timers per enemy (seconds remaining); aligned with enemyObjects
     private List<float> enemyFlashTimers;
     private float enemySpawnTimerSeconds;
@@ -1132,6 +1147,8 @@ public class SnakeGame : MonoBehaviour
     private int engagedEnemyIndex;
     private Vector2Int engagedEnemyCell;
     private float enemyDamageTimer;
+    // RandomWalker cadence control: move every other snake step
+    private int randomWalkerStepParity;
 
     private void EnsureEnemyContainers()
     {
@@ -1139,6 +1156,7 @@ public class SnakeGame : MonoBehaviour
         if (enemyHps == null) enemyHps = new List<int>();
         if (enemyObjects == null) enemyObjects = new List<GameObject>();
         if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
+        if (enemyTypes == null) enemyTypes = new List<EnemyType>();
     }
 
     private void ClearEnemies()
@@ -1154,6 +1172,7 @@ public class SnakeGame : MonoBehaviour
         }
         if (enemyCells != null) enemyCells.Clear();
         if (enemyHps != null) enemyHps.Clear();
+        if (enemyTypes != null) enemyTypes.Clear();
         isEngagedWithEnemy = false;
         engagedEnemyIndex = -1;
         engagedEnemyCell = new Vector2Int(-9999, -9999);
@@ -1194,7 +1213,12 @@ public class SnakeGame : MonoBehaviour
             if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)) && (enemyCells == null || !enemyCells.Contains(p)))
             {
                 enemyCells.Add(p);
-                enemyHps.Add(Mathf.Max(1, enemyHpPer));
+                // Randomly choose enemy type
+                EnemyType type = (Random.Range(0, 2) == 0) ? EnemyType.Default : EnemyType.RandomWalker;
+                enemyTypes.Add(type);
+                // HP: default type uses enemyHpPer, RandomWalker has 6 HP as per requirements
+                int hpForThis = (type == EnemyType.RandomWalker) ? 6 : Mathf.Max(1, enemyHpPer);
+                enemyHps.Add(hpForThis);
                 EnsureEnemyObjectForIndex(enemyCells.Count - 1);
                 // Reduce current interval by 5% of its current value
                 enemySpawnIntervalSeconds = Mathf.Max(minEnemySpawnIntervalSeconds, enemySpawnIntervalSeconds * 0.95f);
@@ -1212,7 +1236,10 @@ public class SnakeGame : MonoBehaviour
                 if (!snakeCellSet.Contains(p) && (foodCells == null || !foodCells.Contains(p)) && (enemyCells == null || !enemyCells.Contains(p)))
                 {
                     enemyCells.Add(p);
-                    enemyHps.Add(Mathf.Max(1, enemyHpPer));
+                    EnemyType type = (Random.Range(0, 2) == 0) ? EnemyType.Default : EnemyType.RandomWalker;
+                    enemyTypes.Add(type);
+                    int hpForThis = (type == EnemyType.RandomWalker) ? 6 : Mathf.Max(1, enemyHpPer);
+                    enemyHps.Add(hpForThis);
                     EnsureEnemyObjectForIndex(enemyCells.Count - 1);
                     // Reduce current interval by 5% of its current value
                     enemySpawnIntervalSeconds = Mathf.Max(minEnemySpawnIntervalSeconds, enemySpawnIntervalSeconds * 0.95f);
@@ -1345,7 +1372,16 @@ public class SnakeGame : MonoBehaviour
         if (renderContainer == null) EnsureRuntimeAssets();
         while (enemyObjects.Count <= index)
         {
-            var go = CreateCellGO("Enemy", enemyColor, enemySprite != null ? enemySprite : cellSprite);
+            // Pick sprite based on enemy type if available
+            Sprite spriteForThis = enemySprite != null ? enemySprite : cellSprite;
+            if (enemyTypes != null && index < enemyTypes.Count)
+            {
+                if (enemyTypes[index] == EnemyType.RandomWalker)
+                {
+                    spriteForThis = randomEnemySprite != null ? randomEnemySprite : spriteForThis;
+                }
+            }
+            var go = CreateCellGO("Enemy", enemyColor, spriteForThis);
             var sr = go.GetComponent<SpriteRenderer>();
             if (sr != null)
             {
@@ -1380,6 +1416,30 @@ public class SnakeGame : MonoBehaviour
                 var pos = enemyCells[i];
                 obj.transform.position = new Vector3(pos.x, pos.y, 0f);
                 obj.transform.localScale = Vector3.one;
+                // Ensure sprite matches type in case type list grew later
+                if (enemyTypes != null && i < enemyTypes.Count)
+                {
+                    var sr = obj.GetComponent<SpriteRenderer>();
+                    if (sr != null)
+                    {
+                        if (enemyTypes[i] == EnemyType.RandomWalker)
+                        {
+                            if (randomEnemySprite != null && sr.sprite != randomEnemySprite)
+                            {
+                                sr.sprite = randomEnemySprite;
+                                ApplySpriteUniformScale(obj.transform, randomEnemySprite);
+                            }
+                        }
+                        else
+                        {
+                            if (enemySprite != null && sr.sprite != enemySprite)
+                            {
+                                sr.sprite = enemySprite;
+                                ApplySpriteUniformScale(obj.transform, enemySprite);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1399,6 +1459,7 @@ public class SnakeGame : MonoBehaviour
         if (index < 0 || index >= (enemyCells?.Count ?? 0)) return;
         enemyCells.RemoveAt(index);
         enemyHps.RemoveAt(index);
+        if (enemyTypes != null && index < enemyTypes.Count) enemyTypes.RemoveAt(index);
         if (enemyObjects != null && index < enemyObjects.Count)
         {
             var go = enemyObjects[index];
@@ -1650,6 +1711,8 @@ public class SnakeGame : MonoBehaviour
             for (int e = 0; e < enemyCells.Count; e++)
             {
                 var ec = enemyCells[e];
+                // Ignore RandomWalker as attractors
+                if (enemyTypes != null && e < enemyTypes.Count && enemyTypes[e] == EnemyType.RandomWalker) continue;
                 int dx = Mathf.Abs(ec.x - fc.x);
                 int dy = Mathf.Abs(ec.y - fc.y);
                 int cheb = Mathf.Max(dx, dy);
@@ -1674,22 +1737,32 @@ public class SnakeGame : MonoBehaviour
             foodTargetEnemyIndex[i] = bestIdx;
         }
 
-        // Move foods within radius 2 by one cell closer, avoiding collisions with snake, foods, enemies
+        // Move foods within radius 2 by one cell closer towards their targeted enemy.
         // Prepare occupied set for foods to avoid duplicate positions
         var occupied = new HashSet<Vector2Int>(snakeCellSet);
         if (foodCells != null)
         {
             for (int k = 0; k < foodCells.Count; k++) occupied.Add(foodCells[k]);
         }
+        // Do NOT treat RandomWalker enemies as attractors; they don't pull food.
         if (enemyCells != null)
         {
-            for (int k = 0; k < enemyCells.Count; k++) occupied.Add(enemyCells[k]);
+            for (int k = 0; k < enemyCells.Count; k++)
+            {
+                bool isRandom = (enemyTypes != null && k < enemyTypes.Count && enemyTypes[k] == EnemyType.RandomWalker);
+                if (!isRandom)
+                {
+                    occupied.Add(enemyCells[k]);
+                }
+            }
         }
 
         for (int i = 0; i < foodCells.Count; i++)
         {
             int target = (i < foodTargetEnemyIndex.Count) ? foodTargetEnemyIndex[i] : -1;
             if (target < 0 || target >= enemyCells.Count) continue;
+            // Skip if the targeted enemy is RandomWalker (they don't attract food)
+            if (enemyTypes != null && target < enemyTypes.Count && enemyTypes[target] == EnemyType.RandomWalker) continue;
             var fc = foodCells[i];
             var ec = enemyCells[target];
             int dx0 = Mathf.Abs(ec.x - fc.x);
@@ -1783,6 +1856,69 @@ public class SnakeGame : MonoBehaviour
         RenderFood();
     }
 
+    // RandomWalker: each tick move randomly (up/down/left/right) if cell is free or contains food.
+    private void UpdateRandomWalkerEnemies()
+    {
+        if (enemyCells == null || enemyCells.Count == 0) return;
+        if (enemyTypes == null || enemyTypes.Count == 0) return;
+
+        // Build occupancy set to prevent enemies overlapping and avoid snake
+        var occupied = new HashSet<Vector2Int>(snakeCellSet);
+        for (int i = 0; i < enemyCells.Count; i++) occupied.Add(enemyCells[i]);
+        int frozenIndex = (isEngagedWithEnemy && engagedEnemyIndex >= 0 && engagedEnemyIndex < enemyCells.Count) ? engagedEnemyIndex : -1;
+        for (int i = 0; i < enemyCells.Count; i++)
+        {
+            if (i == frozenIndex) continue; // do not move the enemy currently engaged with the snake
+            if (i >= enemyTypes.Count) break;
+            if (enemyTypes[i] != EnemyType.RandomWalker) continue;
+            var pos = enemyCells[i];
+            // Candidate directions
+            var dirs = new List<Vector2Int> { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
+            // Shuffle
+            for (int d = 0; d < dirs.Count; d++)
+            {
+                int r = Random.Range(d, dirs.Count);
+                (dirs[d], dirs[r]) = (dirs[r], dirs[d]);
+            }
+            bool moved = false;
+            foreach (var d in dirs)
+            {
+                var cand = pos + d;
+                // Stay within bounds
+                if (cand.x < 0 || cand.y < 0 || cand.x >= gridWidth || cand.y >= gridHeight) continue;
+                // Cannot move onto other enemy; allow moving onto own current cell placeholder by removing first
+                if (occupied.Contains(cand))
+                {
+                    // allow stepping onto a cell that currently has food (food allowed); but occupied set has foods too only when we add them
+                    // so we specifically check that cand is not an enemy and not snake
+                    bool occupiedByEnemy = false;
+                    for (int e = 0; e < enemyCells.Count; e++)
+                    {
+                        if (e == i) continue;
+                        if (enemyCells[e] == cand) { occupiedByEnemy = true; break; }
+                    }
+                    if (occupiedByEnemy) continue;
+                    if (snakeCellSet.Contains(cand)) continue;
+                }
+                // If there is food at target, eat it
+                int foodIdx = IndexOfFoodAtCell(cand);
+                if (foodIdx >= 0)
+                {
+                    RemoveFoodAt(foodIdx);
+                }
+                // Move enemy
+                occupied.Remove(pos);
+                enemyCells[i] = cand;
+                occupied.Add(cand);
+                moved = true;
+                break;
+            }
+            // No valid move -> stay
+        }
+        RenderEnemies();
+        RenderFood();
+    }
+
     private void UpdateFoodArrowTargets(float dt)
     {
         if (enemyCells == null || foodCells == null) return;
@@ -1802,6 +1938,8 @@ public class SnakeGame : MonoBehaviour
             for (int e = 0; e < enemyCells.Count; e++)
             {
                 var ec = enemyCells[e];
+                // Ignore RandomWalker as attractors
+                if (enemyTypes != null && e < enemyTypes.Count && enemyTypes[e] == EnemyType.RandomWalker) continue;
                 int cheb = Mathf.Max(Mathf.Abs(ec.x - fc.x), Mathf.Abs(ec.y - fc.y));
                 if (cheb > 2) continue; // only pick a target if within radius 2
                 if (cheb < bestCheb)
@@ -2509,6 +2647,51 @@ public class SnakeGame : MonoBehaviour
         tex.SetPixel(9, 5, fang);
         tex.SetPixel(6, 4, fang);
         tex.SetPixel(9, 4, fang);
+
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
+    }
+
+    private Sprite GenerateRandomEnemySprite()
+    {
+        // Procedurally generate a distinct sprite to represent RandomWalker enemy
+        const int size = 16;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.name = "EnemyRandomWalkerTexture";
+        tex.filterMode = FilterMode.Point;
+        Color transparent = new Color(0,0,0,0);
+        Color body = new Color(0.05f, 0.12f, 0.18f, 1f); // bluish body
+        Color outline = new Color(0.2f, 0.8f, 1f, 1f);   // cyan outline
+        Color eye = new Color(1f, 1f, 0.3f, 1f);
+        Color mouth = new Color(0.95f, 0.3f, 0.3f, 1f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++) tex.SetPixel(x, y, transparent);
+        }
+
+        // Hex-like rounded body
+        Vector2 c = new Vector2(7.5f, 8f);
+        float r = 7f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 p = new Vector2(x, y);
+                float d = Vector2.Distance(p, c);
+                if (d <= r)
+                {
+                    bool border = d >= r - 1.2f;
+                    tex.SetPixel(x, y, border ? outline : body);
+                }
+            }
+        }
+
+        // Eyes different layout
+        tex.SetPixel(5, 10, eye); tex.SetPixel(6, 10, eye);
+        tex.SetPixel(9, 10, eye); tex.SetPixel(10, 10, eye);
+        // Small mouth
+        tex.SetPixel(7, 6, mouth); tex.SetPixel(8, 6, mouth);
 
         tex.Apply();
         return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size, 0, SpriteMeshType.FullRect);
