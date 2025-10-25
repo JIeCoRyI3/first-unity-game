@@ -37,6 +37,10 @@ public class SnakeGame : MonoBehaviour
     [SerializeField, Tooltip("Primary bounce height (world units)")] private float enemyBounceAmplitudeUnits = 0.14f;
     [SerializeField, Tooltip("Secondary bounce height as fraction of primary (0..1)")] private float enemySecondaryBounceScale = 0.45f;
 
+    [Header("Enemy UI")]
+    [SerializeField, Tooltip("Enemy HP bar height (world units)")] private float enemyHpBarHeight = 0.08f;
+    [SerializeField, Tooltip("Enemy HP bar horizontal inset from cell edges")] private float enemyHpBarInset = 0.06f;
+
     [Header("Visuals")]
     [SerializeField, Tooltip("Border color")] private Color borderColor = new Color(0.85f, 0.85f, 0.95f);
     [SerializeField, Tooltip("Border thickness in world units")] private float borderThickness = 0.12f;
@@ -165,8 +169,8 @@ public class SnakeGame : MonoBehaviour
         EnsureHudExists();
         // Capture default speed so upgrades don't persist across restarts
         defaultMoveIntervalSeconds = moveIntervalSeconds;
-        // First enemy should spawn at 20 seconds
-        defaultEnemySpawnIntervalSeconds = 20f;
+        // First enemy should spawn faster by default (12s)
+        defaultEnemySpawnIntervalSeconds = 12f;
         StartNewGame();
     }
 
@@ -1141,6 +1145,9 @@ public class SnakeGame : MonoBehaviour
     private List<EnemyType> enemyTypes;
     // Damage flash timers per enemy (seconds remaining); aligned with enemyObjects
     private List<float> enemyFlashTimers;
+    // World-space HP bars aligned with enemy indices
+    private List<GameObject> enemyHpBarObjects;
+    private List<SpriteRenderer> enemyHpBarFillRenderers;
     private float enemySpawnTimerSeconds;
 
     private bool isEngagedWithEnemy;
@@ -1157,6 +1164,8 @@ public class SnakeGame : MonoBehaviour
         if (enemyObjects == null) enemyObjects = new List<GameObject>();
         if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
         if (enemyTypes == null) enemyTypes = new List<EnemyType>();
+        if (enemyHpBarObjects == null) enemyHpBarObjects = new List<GameObject>();
+        if (enemyHpBarFillRenderers == null) enemyHpBarFillRenderers = new List<SpriteRenderer>();
     }
 
     private void ClearEnemies()
@@ -1178,6 +1187,16 @@ public class SnakeGame : MonoBehaviour
         engagedEnemyCell = new Vector2Int(-9999, -9999);
         enemyDamageTimer = 0f;
         if (enemyFlashTimers != null) enemyFlashTimers.Clear();
+        if (enemyHpBarObjects != null)
+        {
+            for (int i = 0; i < enemyHpBarObjects.Count; i++)
+            {
+                var go = enemyHpBarObjects[i];
+                if (go != null) Destroy(go);
+            }
+            enemyHpBarObjects.Clear();
+        }
+        if (enemyHpBarFillRenderers != null) enemyHpBarFillRenderers.Clear();
     }
 
     private void UpdateEnemySpawning(float dt)
@@ -1391,6 +1410,39 @@ public class SnakeGame : MonoBehaviour
             // Ensure timer list aligned
             if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
             enemyFlashTimers.Add(0f);
+            // Also ensure an HP bar exists for this enemy index
+            EnsureEnemyHpBarForIndex(enemyObjects.Count - 1);
+        }
+    }
+
+    private void EnsureEnemyHpBarForIndex(int index)
+    {
+        if (renderContainer == null) EnsureRuntimeAssets();
+        if (enemyHpBarObjects == null) enemyHpBarObjects = new List<GameObject>();
+        if (enemyHpBarFillRenderers == null) enemyHpBarFillRenderers = new List<SpriteRenderer>();
+        while (enemyHpBarObjects.Count <= index)
+        {
+            var container = new GameObject("EnemyHPBar");
+            container.transform.SetParent(renderContainer, worldPositionStays: false);
+
+            // Background
+            var bg = new GameObject("BG");
+            bg.transform.SetParent(container.transform, false);
+            var bgSr = bg.AddComponent<SpriteRenderer>();
+            bgSr.sprite = cellSprite;
+            bgSr.color = new Color(0f, 0f, 0f, 0.8f);
+            bgSr.sortingOrder = 1; // above enemy (0), below borders (2)
+
+            // Fill
+            var fill = new GameObject("Fill");
+            fill.transform.SetParent(container.transform, false);
+            var fillSr = fill.AddComponent<SpriteRenderer>();
+            fillSr.sprite = cellSprite;
+            fillSr.color = new Color(0.2f, 1f, 0.2f, 0.95f);
+            fillSr.sortingOrder = 2; // above BG
+
+            enemyHpBarObjects.Add(container);
+            enemyHpBarFillRenderers.Add(fillSr);
         }
     }
 
@@ -1405,6 +1457,11 @@ public class SnakeGame : MonoBehaviour
         // Ensure timers list aligned in size
         if (enemyFlashTimers == null) enemyFlashTimers = new List<float>();
         while (enemyFlashTimers.Count < enemyCells.Count) enemyFlashTimers.Add(0f);
+        // Ensure HP bars exist for all enemies
+        if (enemyHpBarObjects == null) enemyHpBarObjects = new List<GameObject>();
+        if (enemyHpBarFillRenderers == null) enemyHpBarFillRenderers = new List<SpriteRenderer>();
+        while (enemyHpBarObjects.Count < enemyCells.Count) EnsureEnemyHpBarForIndex(enemyHpBarObjects.Count);
+        while (enemyHpBarFillRenderers.Count < enemyCells.Count) enemyHpBarFillRenderers.Add(null);
         for (int i = 0; i < enemyObjects.Count; i++)
         {
             bool active = i < enemyCells.Count;
@@ -1440,6 +1497,58 @@ public class SnakeGame : MonoBehaviour
                         }
                     }
                 }
+
+                // Update HP bar position and fill
+                if (enemyHpBarObjects != null && i < enemyHpBarObjects.Count)
+                {
+                    var hpContainer = enemyHpBarObjects[i];
+                    if (hpContainer != null)
+                    {
+                        hpContainer.SetActive(true);
+                        hpContainer.transform.position = new Vector3(pos.x, pos.y, 0f);
+
+                        // Dimensions
+                        float height = Mathf.Max(0.01f, enemyHpBarHeight);
+                        float inset = Mathf.Clamp(enemyHpBarInset, 0f, 0.49f);
+                        float fullWidth = Mathf.Max(0.01f, 1f - 2f * inset);
+
+                        // Background centered on its own width
+                        // Place at bottom of the cell without following enemy bounce
+                        Vector3 baseLocal = new Vector3(-0.5f + inset + (fullWidth * 0.5f), -0.5f + (height * 0.5f), 0f);
+                        var bg = hpContainer.transform.Find("BG");
+                        if (bg != null)
+                        {
+                            bg.localPosition = baseLocal;
+                            bg.localScale = new Vector3(fullWidth, height, 1f);
+                        }
+
+                        // Fill based on current HP ratio
+                        float maxHp = 1f;
+                        if (enemyTypes != null && i < enemyTypes.Count && enemyTypes[i] == EnemyType.RandomWalker)
+                            maxHp = 6f;
+                        else
+                            maxHp = Mathf.Max(1, enemyHpPer);
+                        float hp = (enemyHps != null && i < enemyHps.Count) ? enemyHps[i] : 0f;
+                        float frac = Mathf.Clamp01(maxHp > 0f ? hp / maxHp : 0f);
+                        float fillWidth = fullWidth * frac;
+
+                        var fill = hpContainer.transform.Find("Fill");
+                        if (fill != null)
+                        {
+                            fill.localScale = new Vector3(Mathf.Max(0.0001f, fillWidth), height, 1f);
+                            // Anchor left; move center to left + half width
+                            fill.localPosition = new Vector3(-0.5f + inset + (fillWidth * 0.5f), -0.5f + (height * 0.5f), 0f);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // Hide HP bar for inactive enemy slots
+                if (enemyHpBarObjects != null && i < enemyHpBarObjects.Count && enemyHpBarObjects[i] != null)
+                {
+                    enemyHpBarObjects[i].SetActive(false);
+                }
             }
         }
     }
@@ -1469,6 +1578,16 @@ public class SnakeGame : MonoBehaviour
         if (enemyFlashTimers != null && index < enemyFlashTimers.Count)
         {
             enemyFlashTimers.RemoveAt(index);
+        }
+        if (enemyHpBarObjects != null && index < enemyHpBarObjects.Count)
+        {
+            var bar = enemyHpBarObjects[index];
+            if (bar != null) Destroy(bar);
+            enemyHpBarObjects.RemoveAt(index);
+        }
+        if (enemyHpBarFillRenderers != null && index < enemyHpBarFillRenderers.Count)
+        {
+            enemyHpBarFillRenderers.RemoveAt(index);
         }
         // Adjust engaged index if needed
         if (isEngagedWithEnemy)
