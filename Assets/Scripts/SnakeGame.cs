@@ -396,6 +396,7 @@ public class SnakeGame : MonoBehaviour
         engagedEnemyIndex = -1;
         engagedEnemyCell = new Vector2Int(-9999, -9999);
         enemyDamageTimer = 0f;
+        randomWalkerStepParity = 0;
 
         // Reset progression
         playerLevel = 1;
@@ -535,8 +536,12 @@ public class SnakeGame : MonoBehaviour
         var currentHead = snakeCells.First.Value;
         var nextHead = currentHead + currentDirection;
 
-        // Move special enemies (RandomWalker) one step per tick before resolving snake collisions
-        UpdateRandomWalkerEnemies();
+        // Move special enemies (RandomWalker) at half speed: one step every two snake ticks
+        if ((randomWalkerStepParity & 1) == 0)
+        {
+            UpdateRandomWalkerEnemies();
+        }
+        randomWalkerStepParity++;
 
         // If currently engaged with an enemy, only resume movement if we are not facing into the same enemy cell anymore
         if (isEngagedWithEnemy)
@@ -1142,6 +1147,8 @@ public class SnakeGame : MonoBehaviour
     private int engagedEnemyIndex;
     private Vector2Int engagedEnemyCell;
     private float enemyDamageTimer;
+    // RandomWalker cadence control: move every other snake step
+    private int randomWalkerStepParity;
 
     private void EnsureEnemyContainers()
     {
@@ -1704,6 +1711,8 @@ public class SnakeGame : MonoBehaviour
             for (int e = 0; e < enemyCells.Count; e++)
             {
                 var ec = enemyCells[e];
+                // Ignore RandomWalker as attractors
+                if (enemyTypes != null && e < enemyTypes.Count && enemyTypes[e] == EnemyType.RandomWalker) continue;
                 int dx = Mathf.Abs(ec.x - fc.x);
                 int dy = Mathf.Abs(ec.y - fc.y);
                 int cheb = Mathf.Max(dx, dy);
@@ -1728,22 +1737,32 @@ public class SnakeGame : MonoBehaviour
             foodTargetEnemyIndex[i] = bestIdx;
         }
 
-        // Move foods within radius 2 by one cell closer, avoiding collisions with snake, foods, enemies
+        // Move foods within radius 2 by one cell closer towards their targeted enemy.
         // Prepare occupied set for foods to avoid duplicate positions
         var occupied = new HashSet<Vector2Int>(snakeCellSet);
         if (foodCells != null)
         {
             for (int k = 0; k < foodCells.Count; k++) occupied.Add(foodCells[k]);
         }
+        // Do NOT treat RandomWalker enemies as attractors; they don't pull food.
         if (enemyCells != null)
         {
-            for (int k = 0; k < enemyCells.Count; k++) occupied.Add(enemyCells[k]);
+            for (int k = 0; k < enemyCells.Count; k++)
+            {
+                bool isRandom = (enemyTypes != null && k < enemyTypes.Count && enemyTypes[k] == EnemyType.RandomWalker);
+                if (!isRandom)
+                {
+                    occupied.Add(enemyCells[k]);
+                }
+            }
         }
 
         for (int i = 0; i < foodCells.Count; i++)
         {
             int target = (i < foodTargetEnemyIndex.Count) ? foodTargetEnemyIndex[i] : -1;
             if (target < 0 || target >= enemyCells.Count) continue;
+            // Skip if the targeted enemy is RandomWalker (they don't attract food)
+            if (enemyTypes != null && target < enemyTypes.Count && enemyTypes[target] == EnemyType.RandomWalker) continue;
             var fc = foodCells[i];
             var ec = enemyCells[target];
             int dx0 = Mathf.Abs(ec.x - fc.x);
@@ -1919,6 +1938,8 @@ public class SnakeGame : MonoBehaviour
             for (int e = 0; e < enemyCells.Count; e++)
             {
                 var ec = enemyCells[e];
+                // Ignore RandomWalker as attractors
+                if (enemyTypes != null && e < enemyTypes.Count && enemyTypes[e] == EnemyType.RandomWalker) continue;
                 int cheb = Mathf.Max(Mathf.Abs(ec.x - fc.x), Mathf.Abs(ec.y - fc.y));
                 if (cheb > 2) continue; // only pick a target if within radius 2
                 if (cheb < bestCheb)
